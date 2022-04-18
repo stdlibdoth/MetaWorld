@@ -22,6 +22,9 @@ public class VoxelDataFormatter : IFormatter<Voxel[]>
     private FrameTimer m_statusTimer;
     private FrameTimer m_initTimer;
 
+    public int ReadingTaskCount { get { return m_readingTasks.Count; } }
+    public int WritingTaskCount { get { return m_writeWaitingTasks.Count + m_writingTasks.Count; } }
+
     public VoxelDataFormatter(int write_interval,int read_interval)
     {
         m_writingTasks = new Dictionary<Vector3Int, Task>();
@@ -63,15 +66,17 @@ public class VoxelDataFormatter : IFormatter<Voxel[]>
             string path = dir + "/" + coord.ToString() + ".txt";
             using (StreamWriter sw = new StreamWriter(path, false))
             {
-                string str = "";
                 for (int i = 0; i < data.Length; i++)
                 {
-                    sw.WriteLine(data[i].render);
-                    sw.WriteLine(data[i].userId);
-                    sw.WriteLine(data[i].color);
+                    if (data[i].render != 0)
+                    {
+                        sw.WriteLine(i);
+                        sw.WriteLine(data[i].userId);
+                        sw.WriteLine(data[i].color);
+                    }
                 }
-                sw.Write(str);
             }
+            
         });
         m_writeWaitingTasks.Add(coord, formatTask);
         m_writeWaitingQueue.Enqueue(coord);
@@ -113,18 +118,21 @@ public class VoxelDataFormatter : IFormatter<Voxel[]>
                 while (!sr.EndOfStream)
                 {
                     string line = sr.ReadLine();
-                    data[indexCounter].render = int.Parse(line);
+                    indexCounter = int.Parse(line);
+
+                    //line = sr.ReadLine();
+                    data[indexCounter].render = 1;
 
                     line = sr.ReadLine();
                     data[indexCounter].userId = int.Parse(line);
 
                     line = sr.ReadLine();
-                    float r = float.Parse(line.Substring(5, 5));
-                    float g = float.Parse(line.Substring(12, 5));
-                    float b = float.Parse(line.Substring(19, 5));
-                    float a = float.Parse(line.Substring(26, 5));
-                    data[indexCounter].color = new Color(r, g, b, a);
-                    indexCounter++;
+                    data[indexCounter].color = 
+                    new Color(float.Parse(line.Substring(5, 5)),
+                        float.Parse(line.Substring(12, 5)),
+                        float.Parse(line.Substring(19, 5)),
+                        float.Parse(line.Substring(26, 5)));
+                    //indexCounter++;
                 }
             }
             onReadAction.Invoke(data);
