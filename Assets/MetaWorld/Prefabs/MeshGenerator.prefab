@@ -48,8 +48,9 @@ MonoBehaviour:
   m_chunkPrefab: {fileID: 7172709940733794704, guid: dcc5ea49381dcda48a32b181626388a5,
     type: 3}
   m_colliderSpawner: {fileID: 9139972703081126857}
-  renderExtent: 60
+  renderExtent: 50
   m_voxelLayer: Voxel
+  m_updateDist: 10
 --- !u!1 &9139972703081126858
 GameObject:
   m_ObjectHideFlags: 0

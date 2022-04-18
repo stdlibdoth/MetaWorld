@@ -17,6 +17,9 @@ public class VoxelManager : MonoBehaviour
     public static int chunkSize { get { return m_singleton.m_chunkSize; } }
     public static string VoxelDataDir { get { return m_singleton.m_voxelDataDir; } }
 
+    public static bool isReadingData { get { return m_singleton.m_voxelDataFormatter.ReadingTaskCount != 0; } }
+    public static bool isExportingData { get { return m_singleton.m_voxelDataFormatter.WritingTaskCount != 0; } }
+
     private string m_voxelDataDir;
     private MeshGenerator m_meshGen;
     private VoxelDataFormatter m_voxelDataFormatter;
@@ -35,18 +38,12 @@ public class VoxelManager : MonoBehaviour
     }
 
 
-    private void OnGUI()
-    {
-        if (GUI.Button(new Rect(200, 200, 300, 100), "Click"))
-            Debug.Log("Clicked the button with text");
-    }
-
     private void Init()
     {
         m_voxelDataDir = GameManager.RootDirectory + "/" + GameManager.GlobalSettings.voxelDataDirectory;
         if (!Directory.Exists(m_voxelDataDir))
             Directory.CreateDirectory(m_voxelDataDir);
-        m_voxelDataFormatter = new VoxelDataFormatter(2,1);
+        m_voxelDataFormatter = new VoxelDataFormatter(5,1);
         m_meshGen = Instantiate(m_meshGenPrefab);
     }
 

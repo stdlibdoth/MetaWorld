@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using System.IO;
+using DG.Tweening;
 
 public class MeshGenerator : MonoBehaviour
 {
@@ -10,14 +11,15 @@ public class MeshGenerator : MonoBehaviour
 
     [SerializeField] private float renderExtent;
     [SerializeField] private string m_voxelLayer;
-
+    [SerializeField] private float m_updateDist;
 
     private Dictionary<Vector3Int, Voxel[]> m_chunkData;
     private Dictionary<Vector3Int, VoxelChunk> m_chunks;
     private HashSet<Vector3Int> m_exportingChunks;
     private HashSet<Vector3Int> m_dataChangeFlag;
     //private HashSet<Vector3Int> m_updatingChunks;
-
+    private bool initFlag;
+    private Vector3 m_prevDrawPos;
 
 
     private MinMaxInt m_rangeX;
@@ -46,20 +48,33 @@ public class MeshGenerator : MonoBehaviour
     private void Start()
     {
         UpdateVoxelRange();
-        LoadInitialChunkData();
-        //ReadVoxelData();
+        //LoadInitialChunkData();
+        string path = "F:/Eifle.txt";
+        ReadVoxelData(path);
+        UpdateChunkDrawRange();
     }
 
 
     private void Update()
     {
-        UpdateVoxelRange();
-        UpdateChunkDrawRange();
-        //float x = transform.position.x + Time.deltaTime * 5;
-        //transform.position = new Vector3(x, transform.position.y, transform.position.z);
-        
+        if (Vector3.Distance(transform.position, m_prevDrawPos) > m_updateDist)
+        {
+            UpdateVoxelRange();
+            UpdateChunkDrawRange();
+            m_prevDrawPos = transform.position;
+            //float x = transform.position.x + Time.deltaTime * 5;
+            //transform.position = new Vector3(x, transform.position.y, transform.position.z);
+        }
+        if (m_exportingChunks.Count == 0 && !initFlag)
+        {
+            initFlag = true;
+            DOTween.Sequence()
+                .Append(transform.DOMoveX(80, 7))
+                .Append(transform.DOMoveX(0, 7))
+                .SetLoops(-1);
+        }
     }
-    
+
     public Voxel[] GetVoxelData(Vector3Int chunk_coord)
     {
         if (m_chunkData.ContainsKey(chunk_coord))
@@ -89,6 +104,7 @@ public class MeshGenerator : MonoBehaviour
 
     private void UpdateVoxelRange()
     {
+        m_prevDrawPos = transform.position;
         m_center = transform.position;
         float vSize = VoxelManager.voxelSize;
         m_voxelExtent = Mathf.FloorToInt(renderExtent / VoxelManager.voxelSize);
@@ -124,18 +140,26 @@ public class MeshGenerator : MonoBehaviour
                         || z == min.z - 2 || z == max.z + 2)
                     {
                         Vector3Int coord = new Vector3Int(x, y, z);
-                        if (m_chunkData.ContainsKey(coord) 
-                            && !m_exportingChunks.Contains(coord)
-                            && m_dataChangeFlag.Contains(coord))
+
+                        if(m_chunkData.ContainsKey(coord)&&
+                            !m_exportingChunks.Contains(coord))
                         {
-                            print("Export:" + coord);
-                            m_exportingChunks.Add(coord);
-                            VoxelManager.ExportData(m_chunkData[coord],coord,
-                                ()=> { 
-                                    m_chunkData.Remove(coord); 
-                                    m_exportingChunks.Remove(coord);
-                                    m_dataChangeFlag.Remove(coord);
-                                });
+                            if (m_dataChangeFlag.Contains(coord))
+                            {
+                                print("Export:" + coord);
+                                m_exportingChunks.Add(coord);
+                                VoxelManager.ExportData(m_chunkData[coord], coord,
+                                    () =>
+                                    {
+                                        m_chunkData.Remove(coord);
+                                        m_exportingChunks.Remove(coord);
+                                        m_dataChangeFlag.Remove(coord);
+                                    });
+                            }
+                            else
+                            {
+                                m_chunkData.Remove(coord);
+                            }
                         }
                         continue;
                     }
@@ -209,6 +233,7 @@ public class MeshGenerator : MonoBehaviour
         string path = VoxelManager.VoxelDataDir + "/" + chunk_coord.ToString() + ".txt";
         if (File.Exists(path))
         {
+            print("read:" + chunk_coord);
             VoxelManager.LoadData(chunk_coord, (data) =>
              {
                  m_chunkData[chunk_coord] = data;
@@ -221,6 +246,7 @@ public class MeshGenerator : MonoBehaviour
         }
         else
         {
+            print("Gen:" + chunk_coord);
             MinMaxInt rangeX = new MinMaxInt(chunk_coord.x * chunkSize, (chunk_coord.x + 1) * chunkSize - 1);
             MinMaxInt rangeY = new MinMaxInt(chunk_coord.y * chunkSize, (chunk_coord.y + 1) * chunkSize - 1);
             MinMaxInt rangeZ = new MinMaxInt(chunk_coord.z * chunkSize, (chunk_coord.z + 1) * chunkSize - 1);
@@ -273,11 +299,10 @@ public class MeshGenerator : MonoBehaviour
 
 
 
-    public void ReadVoxelData()
+    public void ReadVoxelData(string path)
     {
+        //Read data from file
         Voxel[] data = new Voxel[120 * 120 * 120];
-        string path = "F:/Eifle.txt";
-
         if (!File.Exists(path))
             return;
         using (StreamReader sr = new StreamReader(path))
@@ -322,5 +347,25 @@ public class MeshGenerator : MonoBehaviour
             m_chunkData[chunkCoord][localIndex] = data[i];
         }
 
+
+        for (int x = -3; x < 3; x++)
+        {
+            for (int y = -3; y < 3; y++)
+            {
+                for (int z = -3; z < 3; z++)
+                {
+                    //serilaize data
+                    Vector3Int chunkCoord = new Vector3Int(x, y, z);
+                    m_exportingChunks.Add(chunkCoord);
+                    m_dataChangeFlag.Add(chunkCoord);
+                    VoxelManager.ExportData(m_chunkData[chunkCoord], chunkCoord,
+                        () =>
+                        {
+                            m_exportingChunks.Remove(chunkCoord);
+                            m_dataChangeFlag.Remove(chunkCoord);
+                        });
+                }
+            }
+        }
     }
 }
