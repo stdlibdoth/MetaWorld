@@ -108,32 +108,46 @@ public class VoxelDataFormatter : IFormatter<Voxel[]>
 
     private void ScheduleRead(string dir, Vector3Int coord, int data_length, Action<Voxel[]> onReadAction)
     {
-        string p = dir + "/" + coord.ToString() + ".txt";
         Task readTask = new Task(() =>
         {
             Voxel[] data = new Voxel[data_length];
             int indexCounter = 0;
             string path = dir + "/" + coord.ToString() + ".txt";
-            using (StreamReader sr = new StreamReader(path))
+            if (!File.Exists(path))
             {
-                while (!sr.EndOfStream)
+                //Debug.Log("gen:" + coord);
+                System.Random rand = new System.Random();
+                Color color = new Color((float)rand.NextDouble(), (float)rand.NextDouble(), (float)rand.NextDouble(), 1);
+                for (int i = 0; i < data_length; i++)
                 {
-                    string line = sr.ReadLine();
-                    indexCounter = int.Parse(line);
+                    data[i].render = rand.Next(0, 10) == 1 ? 1 : 0;
+                    data[i].color = color;
+                }
+            }
+            else
+            {
+                //Debug.Log("read:" + coord);
+                using (StreamReader sr = new StreamReader(path))
+                {
+                    while (!sr.EndOfStream)
+                    {
+                        string line = sr.ReadLine();
+                        indexCounter = int.Parse(line);
 
-                    //line = sr.ReadLine();
-                    data[indexCounter].render = 1;
+                        //line = sr.ReadLine();
+                        data[indexCounter].render = 1;
 
-                    line = sr.ReadLine();
-                    data[indexCounter].userId = int.Parse(line);
+                        line = sr.ReadLine();
+                        data[indexCounter].userId = int.Parse(line);
 
-                    line = sr.ReadLine();
-                    data[indexCounter].color = 
-                    new Color(float.Parse(line.Substring(5, 5)),
-                        float.Parse(line.Substring(12, 5)),
-                        float.Parse(line.Substring(19, 5)),
-                        float.Parse(line.Substring(26, 5)));
-                    //indexCounter++;
+                        line = sr.ReadLine();
+                        data[indexCounter].color =
+                        new Color(float.Parse(line.Substring(5, 5)),
+                            float.Parse(line.Substring(12, 5)),
+                            float.Parse(line.Substring(19, 5)),
+                            float.Parse(line.Substring(26, 5)));
+                        //indexCounter++;
+                    }
                 }
                 sr.Close();
             }
