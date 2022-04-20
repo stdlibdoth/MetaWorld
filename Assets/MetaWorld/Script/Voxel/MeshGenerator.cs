@@ -69,7 +69,7 @@ public class MeshGenerator : MonoBehaviour
         {
             initFlag = true;
             DOTween.Sequence()
-                .Append(transform.DOMoveX(80, 7))
+                .Append(transform.DOMoveX(100, 7))
                 .Append(transform.DOMoveX(0, 7))
                 .SetLoops(-1);
         }
@@ -125,7 +125,7 @@ public class MeshGenerator : MonoBehaviour
         int yN = size - Mathf.Abs(m_rangeY.min - (min.y + 1) * size);
         int yP = Mathf.Abs(m_rangeY.max - max.y * size);
         int zN = size - Mathf.Abs(m_rangeZ.min - (min.z + 1) * size);
-        int zP = Mathf.Abs(m_rangeZ.max - max.z  * size);
+        int zP = Mathf.Abs(m_rangeZ.max - max.z * size);
 
         for (int x = min.x - 2; x <= max.x + 2; x++)
         {
@@ -268,26 +268,7 @@ public class MeshGenerator : MonoBehaviour
         return step;
     }
 
-    private Voxel[] GenerateRandomVoxelChunk(Vector3Int min, Vector3Int max)
-    {
-        int size = max.x - min.x + 1;
-        Voxel[] voxels = new Voxel[size * size * size];
-        Color color = Random.ColorHSV();
-        color = new Color(color.r, color.g, color.b, 1);
-        for (int x = 0 ; x < size; x++)
-        {
-            for (int y = 0; y < size; y++)
-            {
-                for (int z = 0; z < size; z++)
-                {
-                    int i = z * (size * size) + y * size + x;
-                    voxels[i].render = Random.Range(0, 10) == 1 ? 1 : 0;
-                    voxels[i].color = color;
-                }
-            }
-        }
-        return voxels;
-    }
+
 
 
 
