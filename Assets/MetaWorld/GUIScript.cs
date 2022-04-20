@@ -21,7 +21,7 @@ public class GUIScript : MonoBehaviour
     {
         m_fps = 1 / (Time.time - m_prevTime);
         m_prevTime = Time.time;
-        if(Time.time - m_prevDisplayTime > 1)
+        if(Time.time - m_prevDisplayTime > 0.5f)
         {
             m_displayFps = m_fps;
             m_prevDisplayTime = Time.time;

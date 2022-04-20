@@ -87,7 +87,8 @@ public class GameManager : MonoBehaviour
         }
 
         QualitySettings.vSyncCount = m_gameSettings.vSync;
-        Application.targetFrameRate = m_gameSettings.targetFPS;
+        //Application.targetFrameRate = m_gameSettings.targetFPS;
+        Application.targetFrameRate = -1;
     }
 
 
