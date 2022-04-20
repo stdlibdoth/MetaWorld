@@ -157,8 +157,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 740025631054205020}
-  - component: {fileID: 740025631054205026}
   - component: {fileID: 740025631054205021}
+  - component: {fileID: 740025631054205026}
   m_Layer: 0
   m_Name: CameraRigRoot
   m_TagString: Untagged
@@ -182,28 +182,6 @@ Transform:
   m_Father: {fileID: 0}
   m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 45.4, z: 0}
---- !u!114 &740025631054205026
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 740025631054205023}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 49f1a9c864412f54a91402e7680fde2f, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  m_rootHolder: {fileID: 740025631054205020}
-  m_RigHolder: {fileID: 740025629458319012}
-  m_camHolder: {fileID: 740025629370780545}
-  m_camera: {fileID: 740025630253458801}
-  m_pitchLimit:
-    min: 10
-    max: 90
-  m_camPitch: 40
-  m_cam2JointOffset: 8.491457
-  m_camHeight: 5.5372653
 --- !u!114 &740025631054205021
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -213,10 +191,32 @@ MonoBehaviour:
   m_GameObject: {fileID: 740025631054205023}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ca1a4fdc485fae64f939722c91455618, type: 3}
+  m_Script: {fileID: 11500000, guid: 012eafbb2d31a674badf2e24ab791e8e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_camRig: {fileID: 740025631054205026}
+  m_rootHolder: {fileID: 740025631054205020}
+  m_RigHolder: {fileID: 740025629458319012}
+  m_camHolder: {fileID: 740025629370780545}
+  m_camera: {fileID: 740025630253458801}
+  m_pitchLimit:
+    min: 0
+    max: 0
+  m_camPitch: 10
+  m_cam2JointOffset: 90
+  m_camHeight: 40
+--- !u!114 &740025631054205026
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 740025631054205023}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 02847f7219762ec4690ea5d2a98aaef4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_camRig: {fileID: 740025631054205021}
   m_camera: {fileID: 740025630253458801}
   m_panSpeed: 20
   m_zoomSpeed: 20

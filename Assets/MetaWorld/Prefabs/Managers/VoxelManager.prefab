@@ -41,10 +41,10 @@ MonoBehaviour:
   m_GameObject: {fileID: 1518158085799255302}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 141843fce7646734faa05a4951d2abc1, type: 3}
+  m_Script: {fileID: 11500000, guid: ad4a8318014c6fd45938884bce1b9d62, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   m_voxelSize: 1
   m_chunkSize: 20
-  m_meshGenPrefab: {fileID: 5228735163031861757, guid: 59002ab4410bf354880159085beaf940,
+  m_meshGenPrefab: {fileID: 5228735163031861757, guid: 69b76f26465ddef4eaf1811c9b503390,
     type: 3}

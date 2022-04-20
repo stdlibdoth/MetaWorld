@@ -75,6 +75,7 @@ public class VoxelDataFormatter : IFormatter<Voxel[]>
                         sw.WriteLine(data[i].color);
                     }
                 }
+                sw.Close();
             }
             
         });
@@ -134,6 +135,7 @@ public class VoxelDataFormatter : IFormatter<Voxel[]>
                         float.Parse(line.Substring(26, 5)));
                     //indexCounter++;
                 }
+                sr.Close();
             }
             onReadAction.Invoke(data);
         });
