@@ -231,9 +231,11 @@ public class MeshGenerator : MonoBehaviour
         Voxel[] v = new Voxel[chunkSize * chunkSize * chunkSize];
 
         string path = VoxelManager.VoxelDataDir + "/" + chunk_coord.ToString() + ".txt";
-        if (File.Exists(path))
+        if (!File.Exists(path))
         {
-            print("read:" + chunk_coord);
+            m_dataChangeFlag.Add(chunk_coord);
+        }
+            //print("read:" + chunk_coord);
             VoxelManager.LoadData(chunk_coord, (data) =>
              {
                  m_chunkData[chunk_coord] = data;
@@ -241,20 +243,9 @@ public class MeshGenerator : MonoBehaviour
                  {
                      m_chunks[chunk_coord].SetVoxelData(data);
                      m_chunks[chunk_coord].SetDraw();
+                     //print("Read Done: " + chunk_coord);
                  }
              });
-        }
-        else
-        {
-            print("Gen:" + chunk_coord);
-            MinMaxInt rangeX = new MinMaxInt(chunk_coord.x * chunkSize, (chunk_coord.x + 1) * chunkSize - 1);
-            MinMaxInt rangeY = new MinMaxInt(chunk_coord.y * chunkSize, (chunk_coord.y + 1) * chunkSize - 1);
-            MinMaxInt rangeZ = new MinMaxInt(chunk_coord.z * chunkSize, (chunk_coord.z + 1) * chunkSize - 1);
-
-            v = GenerateRandomVoxelChunk(new Vector3Int(rangeX.min, rangeY.min, rangeZ.min)
-                , new Vector3Int(rangeX.max, rangeY.max, rangeZ.max));
-            m_dataChangeFlag.Add(chunk_coord);
-        }
         return v;
     }
 
