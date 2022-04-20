@@ -20,14 +20,15 @@ public class VoxelChunk : MonoBehaviour
     private List<Color> m_colors;
     private List<int> m_tris;
     private List<Vector3> m_normals;
+
+
+
     private List<BoxCollider> m_colliders;
     private Voxel[] m_voxels;
     private int m_quadCount;
-    private bool m_drawFlag;
-    //private VoxelFormatter m_voxelFormatter;
-    //private int m_drawingState;
-    //private Task m_drawingTask;
-    //private CancellationTokenSource m_tokenSource;
+    private int m_drawingState;
+    private Task m_drawingTask;
+    private int m_drawCount;
 
     private Vector3Int m_drawRangeMin;
     private Vector3Int m_drawRangeMax;
@@ -41,26 +42,27 @@ public class VoxelChunk : MonoBehaviour
         m_mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
         m_meshFilter = GetComponent<MeshFilter>();
         m_meshFilter.mesh = m_mesh;
+
         m_tris = new List<int>();
         m_verts = new List<Vector3>();
         m_colors = new List<Color>();
         m_normals = new List<Vector3>();
+
         m_colliders = new List<BoxCollider>();
-        m_drawFlag = false;
-        //m_voxelFormatter = new VoxelFormatter();
-        //m_drawingTask = new Task(() => { });
-        //m_drawingTask.Start();
-        //m_drawingState = 0;
     }
 
-    private void Start()
+    private void Update()
     {
+        if (m_drawingState == 2)
+            DrawMesh();
     }
 
     private void LateUpdate()
     {
-        if (m_drawFlag)
-            Draw();
+        if (m_drawCount > 0 && m_drawingState == 0)
+            ScheduleDraw();
+        //if (m_drawFlag)
+        //    Draw();
         //if (m_drawingState == 0 && m_drawFlag
         //    && (m_drawingTask.Status == TaskStatus.RanToCompletion || m_drawingTask.Status == TaskStatus.Canceled))
         //{
@@ -98,11 +100,11 @@ public class VoxelChunk : MonoBehaviour
 
     public void SetVoxelData(Voxel[] voxel_data)
     {
-        //for (int i = 0; i < m_voxels.Length; i++)
-        //{
-        //    m_voxels[i] = voxel_data[i];
-        //}
-        m_voxels = voxel_data;
+        for (int i = 0; i < m_voxels.Length; i++)
+        {
+            m_voxels[i] = voxel_data[i];
+        }
+        //m_voxels = voxel_data;
         int l = m_chunkSize * m_chunkSize * m_chunkSize;
         if (m_voxels.Length != l)
             m_voxels = new Voxel[l];
@@ -110,21 +112,8 @@ public class VoxelChunk : MonoBehaviour
 
     public void SetDraw()
     {
-        m_drawFlag = true;
-        //m_drawingState = 0;
-        //if (m_drawingTask.Status == TaskStatus.Running && m_tokenSource!= null)
-        //{
-        //    m_tokenSource.Cancel();
-        //    //m_tokenSource.Dispose();
-        //    //m_drawingTask.Dispose();
-        //}
-        //if (m_drawingState == 0)
-        //{
-        //    m_mesh.Clear();
-        //    m_tokenSource = new CancellationTokenSource();
-        //    m_drawingTask = new Task(() => Draw(m_drawRangeMin, m_drawRangeMax), m_tokenSource.Token);
-        //    m_drawingTask.Start();
-        //}
+        if (m_drawingState != 0 || m_drawCount == 0)
+            m_drawCount++;
     }
 
 
@@ -134,20 +123,13 @@ public class VoxelChunk : MonoBehaviour
         m_drawRangeMax = max;
     }
 
-    //private void ExportData(Action onExport)
-    //{
-    //    m_voxelFormatter.Export(m_voxels, m_coord, VoxelManager.VoxelDataDir, onExport);
-    //}
-
-    //public void LoadData(Action<Voxel[]> onLoad)
-    //{
-    //    m_voxelFormatter.ReadData(VoxelManager.VoxelDataDir, m_coord, m_chunkSize* m_chunkSize* m_chunkSize, onLoad);
-    //}
 
     #endregion
 
+    /*
     private void Draw()
     {
+        m_mesh.Clear();
         BoxCollider[] boxColliders = m_colliders.ToArray();
         for (int i = 0; i < boxColliders.Length; i++)
         {
@@ -155,7 +137,6 @@ public class VoxelChunk : MonoBehaviour
         }
         m_colliders.Clear();
 
-        m_mesh.Clear();
         m_verts.Clear();
         m_colors.Clear();
         m_tris.Clear();
@@ -163,18 +144,15 @@ public class VoxelChunk : MonoBehaviour
         m_quadCount = 0;
 
         //print(m_coord + "   " + m_drawRangeMin + "   " + m_drawRangeMax);
-
-        for (int x = m_drawRangeMin.x; x <= m_drawRangeMax.x ; x++)
+        for (int x = m_drawRangeMin.x; x <= m_drawRangeMax.x; x++)
         {
-            for (int y = m_drawRangeMin.y; y <= m_drawRangeMax.y ; y++)
+            for (int y = m_drawRangeMin.y; y <= m_drawRangeMax.y; y++)
             {
-                for (int z = m_drawRangeMin.z; z <= m_drawRangeMax.z ; z++)
+                for (int z = m_drawRangeMin.z; z <= m_drawRangeMax.z; z++)
                 {
                     int coordIndex = Coord2Index(new Vector3Int(x, y, z), m_chunkSize);
                     if (m_voxels[coordIndex].render == 1)
-                    {
                         UpdateVoxel(new Vector3Int(x, y, z));
-                    }
                 }
             }
         }
@@ -182,7 +160,48 @@ public class VoxelChunk : MonoBehaviour
         m_mesh.SetColors(m_colors);
         m_mesh.SetTriangles(m_tris, 0);
         m_mesh.SetNormals(m_normals);
-        m_drawFlag = false;
+    }
+    */
+
+    private void ScheduleDraw()
+    {
+        //Debug.Log("Schedule draw: " + m_coord +" min:" + m_drawRangeMin + " max:" + m_drawRangeMax);
+        m_verts.Clear();
+        m_colors.Clear();
+        m_tris.Clear();
+        m_normals.Clear();
+        m_drawingState = 1;
+        m_quadCount = 0;
+        m_drawingTask = new Task(() =>
+        {
+            for (int x = m_drawRangeMin.x; x <= m_drawRangeMax.x; x++)
+            {
+                for (int y = m_drawRangeMin.y; y <= m_drawRangeMax.y; y++)
+                {
+                    for (int z = m_drawRangeMin.z; z <= m_drawRangeMax.z; z++)
+                    {
+                        int coordIndex = Coord2Index(new Vector3Int(x, y, z), m_chunkSize);
+                        if (m_voxels[coordIndex].render == 1)
+                            UpdateVoxel(new Vector3Int(x, y, z));
+                    }
+                }
+            }
+            m_drawingState = 2;
+        });
+        m_drawingTask.Start();
+    }
+
+    private void DrawMesh()
+    {
+        //Debug.Log("Draw: " + m_coord);
+        m_mesh.Clear();
+        m_mesh.SetVertices(m_verts);
+        m_mesh.SetColors(m_colors);
+        m_mesh.SetNormals(m_normals);
+        m_mesh.SetTriangles(m_tris, 0);
+        m_drawCount--;
+        m_drawingState = 0;
+        m_drawingTask.Dispose();
     }
 
 
@@ -217,8 +236,6 @@ public class VoxelChunk : MonoBehaviour
             };
             DrawQuad(verts, VoxelDirection.Back, voxel.color);
         }
-
-
         //forward---------------------------------------------------
         Voxel forward;
         if (coord.z == chunkSize - 1)
@@ -331,10 +348,10 @@ public class VoxelChunk : MonoBehaviour
         int i = m_quadCount * 4;
         int[] topo = new int[] { i, i + 1, i + 3, i + 3, i + 1, i + 2 };
         Vector3 normal = dir.ToVector3();
+        m_tris.AddRange(topo);
         m_verts.AddRange(verts);
         m_colors.AddRange(new Color[] { color, color, color, color});
         m_normals.AddRange(new Vector3[] { normal, normal, normal, normal });
-        m_tris.AddRange(topo);
         m_quadCount++;
     }
 

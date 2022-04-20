@@ -48,9 +48,9 @@ public class MeshGenerator : MonoBehaviour
     private void Start()
     {
         UpdateVoxelRange();
-        //LoadInitialChunkData();
-        string path = "F:/Eifle.txt";
-        ReadVoxelData(path);
+        LoadInitialChunkData();
+        //string path = "F:/Eifle.txt";
+        //ReadVoxelData(path);
         UpdateChunkDrawRange();
     }
 
@@ -79,7 +79,7 @@ public class MeshGenerator : MonoBehaviour
     {
         if (m_chunkData.ContainsKey(chunk_coord))
             return m_chunkData[chunk_coord];
-        return null;
+        return new Voxel[VoxelManager.chunkSize* VoxelManager.chunkSize* VoxelManager.chunkSize];
     }
 
 
@@ -120,13 +120,12 @@ public class MeshGenerator : MonoBehaviour
         Vector3Int max = GetChunk(new Vector3Int(m_rangeX.max, m_rangeY.max, m_rangeZ.max));
 
         int size = VoxelManager.chunkSize;
-     
         int xN = size - Mathf.Abs(m_rangeX.min - (min.x + 1) * size);
-        int xP = Mathf.Abs(m_rangeX.max - max.x * size) - 1;
+        int xP = Mathf.Abs(m_rangeX.max - max.x * size);
         int yN = size - Mathf.Abs(m_rangeY.min - (min.y + 1) * size);
-        int yP = Mathf.Abs(m_rangeY.max - max.y * size) - 1;
+        int yP = Mathf.Abs(m_rangeY.max - max.y * size);
         int zN = size - Mathf.Abs(m_rangeZ.min - (min.z + 1) * size);
-        int zP = Mathf.Abs(m_rangeZ.max - max.z * size) - 1;
+        int zP = Mathf.Abs(m_rangeZ.max - max.z  * size);
 
         for (int x = min.x - 2; x <= max.x + 2; x++)
         {
@@ -135,6 +134,7 @@ public class MeshGenerator : MonoBehaviour
                 for (int z = min.z - 2; z <= max.z + 2; z++)
                 {
 
+                    //Serialize
                     if (x == min.x - 2 || x == max.x + 2
                         || y == min.y - 2 || y == max.y + 2
                         || z == min.z - 2 || z == max.z + 2)
@@ -203,6 +203,7 @@ public class MeshGenerator : MonoBehaviour
 
                     Vector3Int drawRangeMin = new Vector3Int(xMin, yMin, zMin);
                     Vector3Int drawRangeMax = new Vector3Int(xMax, yMax, zMax);
+                    //    print("Set: "+ chunkCoord+ " " + drawRangeMin + " " + drawRangeMax + " " + m_rangeX.max + "  " + max);
 
 
                     if (!m_chunks.ContainsKey(chunkCoord))
