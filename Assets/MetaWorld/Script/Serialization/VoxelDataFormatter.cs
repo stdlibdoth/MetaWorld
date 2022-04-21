@@ -148,8 +148,8 @@ public class VoxelDataFormatter : IFormatter<Voxel[]>
                             float.Parse(line.Substring(26, 5)));
                         //indexCounter++;
                     }
+                    sr.Close();
                 }
-                sr.Close();
             }
             onReadAction.Invoke(data);
         });

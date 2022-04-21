@@ -48,16 +48,9 @@ public class MeshGenerator : MonoBehaviour
     private void Start()
     {
         UpdateVoxelRange();
-<<<<<<< HEAD
-        //LoadInitialChunkData();
-        string path = Application.persistentDataPath + "/Eifle.txt";
-        //string path = "F:/Eifle.txt";
-        ReadVoxelData(path);
-=======
         LoadInitialChunkData();
         //string path = "F:/Eifle.txt";
         //ReadVoxelData(path);
->>>>>>> 553e20e58a8730a1a90b4480e6bf4ca7f887970d
         UpdateChunkDrawRange();
     }
 
@@ -148,11 +141,12 @@ public class MeshGenerator : MonoBehaviour
                     {
                         Vector3Int coord = new Vector3Int(x, y, z);
 
-                        if (m_chunkData.ContainsKey(coord) &&
+                        if(m_chunkData.ContainsKey(coord)&&
                             !m_exportingChunks.Contains(coord))
                         {
                             if (m_dataChangeFlag.Contains(coord))
                             {
+                                print("Export:" + coord);
                                 m_exportingChunks.Add(coord);
                                 VoxelManager.ExportData(m_chunkData[coord], coord,
                                     () =>
@@ -293,7 +287,6 @@ public class MeshGenerator : MonoBehaviour
                 data[index].render = 1;
                 data[index].color = Color.blue;
             }
-            sr.Close();
         }
 
         for (int x = -3; x < 3; x++)
