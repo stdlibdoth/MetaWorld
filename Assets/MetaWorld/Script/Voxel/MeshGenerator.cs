@@ -62,16 +62,6 @@ public class MeshGenerator : MonoBehaviour
             UpdateVoxelRange();
             UpdateChunkDrawRange();
             m_prevDrawPos = transform.position;
-            //float x = transform.position.x + Time.deltaTime * 5;
-            //transform.position = new Vector3(x, transform.position.y, transform.position.z);
-        }
-        if (m_exportingChunks.Count == 0 && !initFlag)
-        {
-            initFlag = true;
-            DOTween.Sequence()
-                .Append(transform.DOMoveX(100, 7))
-                .Append(transform.DOMoveX(0, 7))
-                .SetLoops(-1);
         }
     }
 

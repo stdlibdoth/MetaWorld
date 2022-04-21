@@ -102,7 +102,7 @@ public class VoxelChunk : MonoBehaviour
     private void Update()
     {
         if (m_drawingState == 2)
-            DrawMesh();
+            StartCoroutine(DrawMesh());
     }
 
     private void LateUpdate()
@@ -267,7 +267,7 @@ public class VoxelChunk : MonoBehaviour
         m_drawingTask.Start();
     }
 
-    private void DrawMesh()
+    private IEnumerator DrawMesh()
     {
         //Debug.Log("Draw: " + m_coord);
         m_mesh.Clear();
@@ -278,6 +278,7 @@ public class VoxelChunk : MonoBehaviour
         m_drawCount--;
         m_drawingState = 0;
         m_drawingTask.Dispose();
+        yield return null;
     }
 
 

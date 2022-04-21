@@ -1,15 +1,20 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using DG.Tweening;
 
 public class GUIScript : MonoBehaviour
 {
+    private Transform m_meshTransform;
+
     private GUIStyle m_guiStyle;
 
     private float m_prevTime;
     private float m_fps;
     private float m_prevDisplayTime;
     private float m_displayFps;
+
+
 
     private void Awake()
     {
@@ -31,5 +36,17 @@ public class GUIScript : MonoBehaviour
     private void OnGUI()
     {
         GUI.Label(new Rect(100, 100, 300, 100), m_displayFps.ToString("F1"), m_guiStyle);
+        if (GUI.Button(new Rect(100, 300, 300, 100), "Click"))
+            Move();
+    }
+
+    private void Move()
+    {
+        if (m_meshTransform == null)
+            m_meshTransform = GameObject.FindObjectOfType<MeshGenerator>().transform;
+        DOTween.Sequence()
+            .Append(m_meshTransform.DOMoveX(50, 8))
+            .Append(m_meshTransform.DOMoveX(-50, 8))
+            .SetLoops(2);
     }
 }
