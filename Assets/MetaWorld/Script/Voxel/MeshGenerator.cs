@@ -15,6 +15,7 @@ public class MeshGenerator : MonoBehaviour
 
     private Dictionary<Vector3Int, Voxel[]> m_chunkData;
     private Dictionary<Vector3Int, VoxelChunk> m_chunks;
+    private HashSet<Vector3Int> m_activeChunks;
     private HashSet<Vector3Int> m_exportingChunks;
     private HashSet<Vector3Int> m_dataChangeFlag;
     //private HashSet<Vector3Int> m_updatingChunks;
@@ -37,6 +38,7 @@ public class MeshGenerator : MonoBehaviour
     {
         m_chunkData = new Dictionary<Vector3Int, Voxel[]>();
         m_chunks = new Dictionary<Vector3Int, VoxelChunk>();
+        m_activeChunks = new HashSet<Vector3Int>();
         m_exportingChunks = new HashSet<Vector3Int>();
         m_dataChangeFlag = new HashSet<Vector3Int>();
         m_center = transform.position;
@@ -79,13 +81,17 @@ public class MeshGenerator : MonoBehaviour
         Vector3Int min = GetChunk(new Vector3Int(m_rangeX.min, m_rangeY.min, m_rangeZ.min));
         Vector3Int max = GetChunk(new Vector3Int(m_rangeX.max, m_rangeY.max, m_rangeZ.max));
 
-        for (int x = min.x - 1; x <= max.x + 1; x++)
+        for (int x = min.x ; x <= max.x ; x++)
         {
-            for (int y = min.y - 1; y <= max.y + 1; y++)
+            for (int y = min.y ; y <= max.y ; y++)
             {
-                for (int z = min.z - 1; z <= max.z + 1; z++)
+                for (int z = min.z ; z <= max.z ; z++)
                 {
                     Vector3Int coord = new Vector3Int(x, y, z);
+                    VoxelChunk chunk = Instantiate(m_chunkPrefab).Init(new Vector3Int(x, y, z), VoxelManager.chunkSize, this);
+                    chunk.transform.position = new Vector3(x, y, z) * VoxelManager.chunkSize;
+                    m_chunks[coord] = chunk;
+                    m_activeChunks.Add(coord);
                     m_chunkData[coord] = RequestChuckData(coord);
                 }
             }
@@ -163,11 +169,21 @@ public class MeshGenerator : MonoBehaviour
                         Vector3Int coord = new Vector3Int(x, y, z);
                         if (m_chunks.ContainsKey(coord))
                         {
-                            m_chunks[coord].SetDrawRange(Vector3Int.zero, Vector3Int.zero);
+                            //m_chunks[coord].SetDrawRange(Vector3Int.zero, Vector3Int.zero);
                             m_chunks[coord].gameObject.SetActive(false);
+                            m_activeChunks.Remove(coord);
                         }
-                        if(!m_chunkData.ContainsKey(coord))
-                            m_chunkData[coord] = RequestChuckData(coord);
+                        else
+                        {
+                            VoxelChunk chunk = Instantiate(m_chunkPrefab).Init(new Vector3Int(x, y, z), VoxelManager.chunkSize, this);
+                            chunk.transform.position = new Vector3(x, y, z) * VoxelManager.chunkSize;
+                            chunk.gameObject.SetActive(false);
+                            m_chunks[coord] = chunk;
+                            m_activeChunks.Remove(coord);
+                            if (!m_chunkData.ContainsKey(coord))
+                                m_chunkData[coord] = RequestChuckData(coord);
+                        }
+
                         continue;
                     }
 
@@ -196,21 +212,22 @@ public class MeshGenerator : MonoBehaviour
                     //    print("Set: "+ chunkCoord+ " " + drawRangeMin + " " + drawRangeMax + " " + m_rangeX.max + "  " + max);
 
 
-                    if (!m_chunks.ContainsKey(chunkCoord))
-                    {
-                        VoxelChunk chunk = Instantiate(m_chunkPrefab).Init(new Vector3Int(x, y, z), VoxelManager.chunkSize, this);
-                        chunk.transform.position = new Vector3(x, y, z) * VoxelManager.chunkSize;
-                        m_chunks[chunkCoord] = chunk;
-                        m_chunks[chunkCoord].SetVoxelData(m_chunkData[chunkCoord]);
-                    }
+                    //if (!m_chunks.ContainsKey(chunkCoord))
+                    //{
+                    //    VoxelChunk chunk = Instantiate(m_chunkPrefab).Init(new Vector3Int(x, y, z), VoxelManager.chunkSize, this);
+                    //    chunk.transform.position = new Vector3(x, y, z) * VoxelManager.chunkSize;
+                    //    m_chunks[chunkCoord] = chunk;
+                    //    m_chunks[chunkCoord].SetVoxelData(m_chunkData[chunkCoord]);
+                    //}
 
                     m_chunks[chunkCoord].gameObject.SetActive(true);
-                    if (m_chunks[chunkCoord].drawRangeMin != drawRangeMin
-                        || m_chunks[chunkCoord].drawRangeMax != drawRangeMax)
-                    {
-                        m_chunks[chunkCoord].SetDrawRange(drawRangeMin, drawRangeMax);
-                        m_chunks[chunkCoord].SetDraw();
-                    }
+                    m_activeChunks.Add(chunkCoord);
+                    //if (m_chunks[chunkCoord].drawRangeMin != drawRangeMin
+                    //    || m_chunks[chunkCoord].drawRangeMax != drawRangeMax)
+                    //{
+                    //    m_chunks[chunkCoord].SetDrawRange(drawRangeMin, drawRangeMax);
+                    //    m_chunks[chunkCoord].SetUpdateMesh();
+                    //}
                 }
             }
         }
@@ -226,17 +243,16 @@ public class MeshGenerator : MonoBehaviour
         {
             m_dataChangeFlag.Add(chunk_coord);
         }
-            //print("read:" + chunk_coord);
-            VoxelManager.LoadData(chunk_coord, (data) =>
+        VoxelManager.LoadData(chunk_coord, (data) =>
+         {
+             m_chunkData[chunk_coord] = data;
+             //print(chunk_coord + "  " + m_chunks.ContainsKey(chunk_coord) + m_chunks[chunk_coord].gameObject.activeSelf);
+             if (m_chunks.ContainsKey(chunk_coord))
              {
-                 m_chunkData[chunk_coord] = data;
-                 if (m_chunks.ContainsKey(chunk_coord))
-                 {
-                     m_chunks[chunk_coord].SetVoxelData(data);
-                     m_chunks[chunk_coord].SetDraw();
-                     //print("Read Done: " + chunk_coord);
-                 }
-             });
+                 m_chunks[chunk_coord].SetVoxelData(data);
+                 m_chunks[chunk_coord].SetUpdateMesh2();
+             }
+         });
         return v;
     }
 
@@ -257,9 +273,6 @@ public class MeshGenerator : MonoBehaviour
         int step = Mathf.Sign(num) == -1 ? -1 : 0;
         return step;
     }
-
-
-
 
 
     public void ReadVoxelData(string path)

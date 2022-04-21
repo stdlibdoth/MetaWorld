@@ -7,6 +7,7 @@ using Unity.Jobs;
 using Unity.Burst;
 using UnityEngine.Rendering;
 using Unity.Collections;
+using Battlehub.Dispatcher;
 
 [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
 public class VoxelChunk : MonoBehaviour
@@ -101,15 +102,15 @@ public class VoxelChunk : MonoBehaviour
 
     private void Update()
     {
-        if (m_drawingState == 2)
-            StartCoroutine(DrawMesh());
+        //if (m_drawingState == 2)
+        //    StartCoroutine(DrawMesh());
     }
 
     private void LateUpdate()
     {
-        if (m_drawCount > 0 && m_drawingState == 0)
+        //if (m_drawCount > 0 && m_drawingState == 0)
             //ScheduleAsyncDraw();
-            ScheduleDraw();
+            //ScheduleMeshUpdate();
         //if (m_drawFlag)
         //    Draw();
     }
@@ -136,12 +137,26 @@ public class VoxelChunk : MonoBehaviour
             m_voxels = new Voxel[l];
     }
 
-    public void SetDraw()
+    public void SetUpdateMesh()
     {
+        m_drawRangeMin = Vector3Int.zero;
+        int max = VoxelManager.chunkSize - 1;
+        m_drawRangeMax = new Vector3Int(max, max, max);
         if (m_drawingState != 0 || m_drawCount == 0)
             m_drawCount++;
     }
 
+    public async void SetUpdateMesh2()
+    {
+        m_drawRangeMin = Vector3Int.zero;
+        int max = VoxelManager.chunkSize - 1;
+        m_drawRangeMax = new Vector3Int(max, max, max);
+        if (m_drawingState == 0)
+        {
+            await CalculateMesh();
+            UpdateMesh();
+        }    
+    }
 
     public void SetDrawRange(Vector3Int min, Vector3Int max)
     {
@@ -239,7 +254,7 @@ public class VoxelChunk : MonoBehaviour
     //    }
     //}
 
-    private void ScheduleDraw()
+    private void ScheduleMeshUpdate()
     {
         //Debug.Log("Schedule draw: " + m_coord +" min:" + m_drawRangeMin + " max:" + m_drawRangeMax);
         m_verts.Clear();
@@ -248,7 +263,7 @@ public class VoxelChunk : MonoBehaviour
         m_normals.Clear();
         m_drawingState = 1;
         m_quadCount = 0;
-        m_drawingTask = new Task(() =>
+        m_drawingTask =new Task(() =>
         {
             for (int x = m_drawRangeMin.x; x <= m_drawRangeMax.x; x++)
             {
@@ -267,9 +282,46 @@ public class VoxelChunk : MonoBehaviour
         m_drawingTask.Start();
     }
 
+    private async Task CalculateMesh()
+    {
+        m_verts.Clear();
+        m_colors.Clear();
+        m_tris.Clear();
+        m_normals.Clear();
+        m_drawingState = 1;
+        m_quadCount = 0;
+        for (int x = m_drawRangeMin.x; x <= m_drawRangeMax.x; x++)
+        {
+            for (int y = m_drawRangeMin.y; y <= m_drawRangeMax.y; y++)
+            {
+                for (int z = m_drawRangeMin.z; z <= m_drawRangeMax.z; z++)
+                {
+                    int coordIndex = Coord2Index(new Vector3Int(x, y, z), m_chunkSize);
+                    if (m_voxels[coordIndex].render == 1)
+                        UpdateVoxel(new Vector3Int(x, y, z));
+                }
+            }
+        }
+        m_drawingState = 2;
+        await Task.Yield();
+    }
+
+    private async void UpdateMesh()
+    {
+        m_mesh.Clear();
+        m_mesh.SetVertices(m_verts.ToArray());
+        m_mesh.SetColors(m_colors.ToArray());
+        m_mesh.SetNormals(m_normals.ToArray());
+        m_mesh.SetTriangles(m_tris.ToArray(), 0);
+        m_drawCount--;
+        m_drawingState = 0;
+        //m_drawingTask.Dispose();
+        await Task.Yield();
+    }
+
+
     private IEnumerator DrawMesh()
     {
-        //Debug.Log("Draw: " + m_coord);
         m_mesh.Clear();
         m_mesh.SetVertices(m_verts.ToArray());
         m_mesh.SetColors(m_colors.ToArray());
@@ -314,6 +366,7 @@ public class VoxelChunk : MonoBehaviour
             };
             DrawQuad(verts, VoxelDirection.Back, voxel.color);
         }
+
         //forward---------------------------------------------------
         Voxel forward;
         if (coord.z == chunkSize - 1)

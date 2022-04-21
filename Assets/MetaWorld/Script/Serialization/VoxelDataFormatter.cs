@@ -12,6 +12,8 @@ public class VoxelDataFormatter : IFormatter<Voxel[]>
     private Dictionary<Vector3Int,Task> m_writingTasks;
     private Dictionary<Vector3Int,Task> m_writeWaitingTasks;
     private Dictionary<Vector3Int, Action> m_onExportActions;
+    private Dictionary<Vector3Int, Action<Voxel[]>> m_onReadActions;
+    private Dictionary<Vector3Int, Voxel[]> m_readData;
     private Queue<Vector3Int> m_writeWaitingQueue;
 
     private Dictionary<Vector3Int, Task> m_readingTasks;
@@ -30,6 +32,8 @@ public class VoxelDataFormatter : IFormatter<Voxel[]>
         m_writingTasks = new Dictionary<Vector3Int, Task>();
         m_writeWaitingTasks = new Dictionary<Vector3Int, Task>();
         m_onExportActions = new Dictionary<Vector3Int, Action>();
+        m_onReadActions = new Dictionary<Vector3Int, Action<Voxel[]>>();
+        m_readData = new Dictionary<Vector3Int, Voxel[]>();
         m_writeWaitingQueue = new Queue<Vector3Int>();
         m_readingTasks = new Dictionary<Vector3Int, Task>();
         m_readWaitingTasks = new Dictionary<Vector3Int, Task>();
@@ -149,7 +153,8 @@ public class VoxelDataFormatter : IFormatter<Voxel[]>
                     }
                 }
             }
-            onReadAction.Invoke(data);
+            //onReadAction.Invoke(data);
+            m_readData[coord] = data;
         });
         m_readWaitingTasks.Add(coord, readTask);
         m_readWaitingQueue.Enqueue(coord);
@@ -160,6 +165,7 @@ public class VoxelDataFormatter : IFormatter<Voxel[]>
         if (m_readingTasks.ContainsKey(coord) || m_readWaitingTasks.ContainsKey(coord))
             return;
         ScheduleRead(dir, coord, data_length, onReadAction);
+        m_onReadActions.Add(coord, onReadAction);
     }
 
 
@@ -210,7 +216,9 @@ public class VoxelDataFormatter : IFormatter<Voxel[]>
         {
             if (m_readingTasks[pair.Key].Status == TaskStatus.RanToCompletion)
             {
+                m_onReadActions[pair.Key].Invoke(m_readData[pair.Key]);
                 keys.Add(pair.Key);
+                m_onReadActions.Remove(pair.Key);
             }
         }
         keyArray = keys.ToArray();
