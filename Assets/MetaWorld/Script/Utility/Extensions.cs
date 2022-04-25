@@ -5,7 +5,7 @@ using UnityEngine;
 
 public static class Extensions
 {
-    public static Vector3[] VoxelDir2V3 = new Vector3[]
+    public readonly static Vector3[] VoxelDir2V3 = new Vector3[]
     {
         Vector3.back,
         Vector3.forward,
