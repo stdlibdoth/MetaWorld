@@ -6,10 +6,17 @@ using System;
 
 public class VoxelManager : MonoBehaviour
 {
+    [SerializeField] private MeshGenerator m_meshGenPrefab;
+
+    [Header("Voxel")]
     [SerializeField] private float m_voxelSize;
     [SerializeField] private int m_chunkSize;
 
-    [SerializeField] private MeshGenerator m_meshGenPrefab;
+    [Header("Formatter")]
+    [SerializeField] private int m_writeInterval;
+    [SerializeField] private int m_writeBatchSize;
+    [SerializeField] private int m_readInterval;
+
 
     private static VoxelManager m_singleton = null;
 
@@ -43,14 +50,14 @@ public class VoxelManager : MonoBehaviour
         m_voxelDataDir = GameManager.RootDirectory + "/" + GameManager.GlobalSettings.voxelDataDirectory;
         if (!Directory.Exists(m_voxelDataDir))
             Directory.CreateDirectory(m_voxelDataDir);
-        m_voxelDataFormatter = new VoxelDataFormatter(5,1);
+        m_voxelDataFormatter = new VoxelDataFormatter(m_writeInterval,m_readInterval,m_writeBatchSize);
         m_meshGen = Instantiate(m_meshGenPrefab);
     }
 
 
     public static void ExportData(Voxel[] data, Vector3Int chunk_coord, Action onExportData)
     {
-        m_singleton.m_voxelDataFormatter.Export(data, chunk_coord, m_singleton.m_voxelDataDir, onExportData);
+        m_singleton.m_voxelDataFormatter.Export(data, chunk_coord, onExportData);
     }
 
     public static void LoadData(Vector3Int chunk_coord, Action<Voxel[]> onReadData)
@@ -58,4 +65,9 @@ public class VoxelManager : MonoBehaviour
         m_singleton.m_voxelDataFormatter.ReadData(m_singleton.m_voxelDataDir, chunk_coord, chunkSize * chunkSize * chunkSize, onReadData);
     }
 
+
+    private void OnDestroy()
+    {
+        m_voxelDataFormatter.Dispose();
+    }
 }

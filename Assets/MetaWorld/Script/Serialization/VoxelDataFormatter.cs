@@ -2,17 +2,26 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using System.IO;
-using System.Threading;
 using System.Threading.Tasks;
 using System;
+using Unity.Jobs;
+using Unity.Collections.LowLevel.Unsafe;
+using Unity.Collections;
+using Unity.Burst;
 
 
-public class VoxelDataFormatter : IFormatter<Voxel[]>
+public class VoxelDataFormatter : IFormatter<Voxel[]>,IDisposable
 {
-    private Dictionary<Vector3Int,Task> m_writingTasks;
-    private Dictionary<Vector3Int,Task> m_writeWaitingTasks;
+    private int m_writeBatchSize;
+
+    private NativeList<Vector3Int> m_writingChunks;
+    private Dictionary<Vector3Int,NativeArray<Voxel>> m_writeDataBuffer;
     private Dictionary<Vector3Int, Action> m_onExportActions;
-    private Queue<Vector3Int> m_writeWaitingQueue;
+    private NativeQueue<Vector3Int> m_writeQueue;
+    private int m_writeQueueSize;
+    private JobHandle m_writeHandle;
+    private int m_writeState;
+
 
     private Dictionary<Vector3Int, Task> m_readingTasks;
     private Dictionary<Vector3Int, Task> m_readWaitingTasks;
@@ -23,14 +32,16 @@ public class VoxelDataFormatter : IFormatter<Voxel[]>
     private FrameTimer m_initTimer;
 
     public int ReadingTaskCount { get { return m_readingTasks.Count; } }
-    public int WritingTaskCount { get { return m_writeWaitingTasks.Count + m_writingTasks.Count; } }
+    public int WritingTaskCount { get { return m_writeDataBuffer.Keys.Count; } }
 
-    public VoxelDataFormatter(int write_interval,int read_interval)
+    public VoxelDataFormatter(int write_interval,int read_interval, int writeBatchSize)
     {
-        m_writingTasks = new Dictionary<Vector3Int, Task>();
-        m_writeWaitingTasks = new Dictionary<Vector3Int, Task>();
+        m_writeState = 0;
+        m_writeBatchSize = writeBatchSize;
+        m_writingChunks = new NativeList<Vector3Int>(Allocator.Persistent);
+        m_writeDataBuffer = new Dictionary<Vector3Int, NativeArray<Voxel>>();
         m_onExportActions = new Dictionary<Vector3Int, Action>();
-        m_writeWaitingQueue = new Queue<Vector3Int>();
+        m_writeQueue = new NativeQueue<Vector3Int>(Allocator.Persistent);
         m_readingTasks = new Dictionary<Vector3Int, Task>();
         m_readWaitingTasks = new Dictionary<Vector3Int, Task>();
         m_readWaitingQueue = new Queue<Vector3Int>();
@@ -59,34 +70,45 @@ public class VoxelDataFormatter : IFormatter<Voxel[]>
         FrameTimerManager.DisposeTimer(m_initTimer);
     }
 
-    private void ScheduleExport(Voxel[] data, Vector3Int coord, string dir)
+    private void ScheduleExport()
     {
-        Task formatTask = new Task(() =>
+        m_writeState = 1;
+        ExportJobs exportJobs = new ExportJobs();
+
+        NativeList<Voxel> data = new NativeList<Voxel>(Allocator.Temp);
+        int batchSize = m_writeBatchSize < m_writeQueueSize ? m_writeBatchSize : m_writeQueueSize;
+        for (int i = 0; i < batchSize; i++)
         {
-            string path = dir + "/" + coord.ToString() + ".txt";
-            using (StreamWriter sw = new StreamWriter(path, false))
-            {
-                for (int i = 0; i < data.Length; i++)
-                {
-                    if (data[i].render != 0)
-                    {
-                        sw.WriteLine(i);
-                        sw.WriteLine(data[i].userId);
-                        sw.WriteLine(data[i].color);
-                    }
-                }
-            }
-            
-        });
-        m_writeWaitingTasks.Add(coord, formatTask);
-        m_writeWaitingQueue.Enqueue(coord);
+            Vector3Int writeChunk = m_writeQueue.Dequeue();
+            m_writingChunks.Add(writeChunk);
+            data.AddRange(m_writeDataBuffer[writeChunk]);
+
+            m_writeQueueSize--;
+            m_writeDataBuffer[writeChunk].Dispose();
+            m_writeDataBuffer.Remove(writeChunk);
+        }
+
+        exportJobs.coords = m_writingChunks.ToArray(Allocator.Persistent);
+        exportJobs.voxelData = data.ToArray(Allocator.Persistent);
+        data.Dispose();
+
+        exportJobs.dataLength = VoxelManager.chunkSize * VoxelManager.chunkSize * VoxelManager.chunkSize;
+        exportJobs.dir = VoxelManager.VoxelDataDir;
+        Debug.Log(batchSize);
+        exportJobs.Schedule(batchSize, 10);
     }
 
-    public void Export(Voxel[] data, Vector3Int coord,string dir, Action onExport)
+    public void Export(Voxel[] data, Vector3Int coord, Action onExport)
     {
-        if (m_writingTasks.ContainsKey(coord) || m_writeWaitingTasks.ContainsKey(coord))
+        //if (m_writingTasks.ContainsKey(coord) || m_writeWaitingTasks.ContainsKey(coord))
+        //    return;
+
+        if (m_writeDataBuffer.ContainsKey(coord))
             return;
-        ScheduleExport(data, coord, dir);
+        NativeArray<Voxel> d = new NativeArray<Voxel>(data, Allocator.Persistent);
+        m_writeDataBuffer[coord] = d;
+        m_writeQueue.Enqueue(coord);
+        m_writeQueueSize++;
         m_onExportActions.Add(coord, onExport);
     }
 
@@ -165,13 +187,9 @@ public class VoxelDataFormatter : IFormatter<Voxel[]>
 
     private void UpdateWriteScheduler()
     {
-        if (m_writeWaitingQueue.Count > 0)
+        if (m_writeQueueSize > 0 && m_writeState == 0)
         {
-            Vector3Int coord = m_writeWaitingQueue.Dequeue();
-            Task task = m_writeWaitingTasks[coord];
-            task.Start();
-            m_writingTasks.Add(coord, task);
-            m_writeWaitingTasks.Remove(coord);
+            ScheduleExport();
         }
     }
 
@@ -189,23 +207,21 @@ public class VoxelDataFormatter : IFormatter<Voxel[]>
 
     private void UpdateTaskStatus()
     {
-        List<Vector3Int> keys = new List<Vector3Int>();
-        foreach (var pair in m_writingTasks)
+        if(m_writeState == 1 && m_writeHandle.IsCompleted)
         {
-            if (m_writingTasks[pair.Key].Status == TaskStatus.RanToCompletion)
+            m_writeHandle.Complete();
+            NativeArray<Vector3Int> chunks = m_writingChunks.ToArray(Allocator.Temp);
+            for (int i = 0; i < chunks.Length; i++)
             {
-                m_onExportActions[pair.Key].Invoke();
-                keys.Add(pair.Key);
-                m_onExportActions.Remove(pair.Key);
+                m_onExportActions[chunks[i]].Invoke();
+                m_onExportActions.Remove(chunks[i]);
             }
+            chunks.Dispose();
+            m_writingChunks.Clear();
+            m_writeState = 0;
         }
-        Vector3Int[] keyArray = keys.ToArray();
-        for (int i = 0; i < keyArray.Length; i++)
-        {
-            m_writingTasks.Remove(keyArray[i]);
-        }
-        keys.Clear();
 
+        List<Vector3Int> keys = new List<Vector3Int>();
         foreach (var pair in m_readingTasks)
         {
             if (m_readingTasks[pair.Key].Status == TaskStatus.RanToCompletion)
@@ -213,7 +229,7 @@ public class VoxelDataFormatter : IFormatter<Voxel[]>
                 keys.Add(pair.Key);
             }
         }
-        keyArray = keys.ToArray();
+        Vector3Int[] keyArray = keys.ToArray();
         for (int i = 0; i < keyArray.Length; i++)
         {
             m_readingTasks.Remove(keyArray[i]);
@@ -221,47 +237,46 @@ public class VoxelDataFormatter : IFormatter<Voxel[]>
 
     }
 
-    //private struct SaveJob : IJobFor
-    //{
-    //    [ReadOnly]
-    //    [DeallocateOnJobCompletion]
-    //    [NativeDisableParallelForRestriction]
-    //    public NativeArray<Voxel> voxelData;
+    public void Dispose()
+    {
+        m_writeQueue.Dispose();
+        m_writingChunks.Dispose();
+    }
 
+    private struct ExportJobs : IJobParallelFor
+    {
+        [ReadOnly]
+        [DeallocateOnJobCompletion]
+        public NativeArray<Voxel> voxelData;
 
-    //    [ReadOnly]
-    //    [DeallocateOnJobCompletion]
-    //    [NativeDisableParallelForRestriction]
-    //    public NativeArray<Vector3Int> coords;
+        [ReadOnly]
+        [DeallocateOnJobCompletion]
+        public NativeArray<Vector3Int> coords;
 
+        [ReadOnly]
+        public FixedString512Bytes dir;
+        //public string dir;
 
-    //    [ReadOnly]
-    //    public int chunkLength;
+        [ReadOnly]
+        public int dataLength;
 
-    //    //[ReadOnly]
-    //    //public dir;
-
-    //    public void Execute(int index)
-    //    {
-    //        string str = "";
-    //        for (int i = 0; i < chunkLength; i++)
-    //        {
-    //            int vIndex = index * chunkLength + i;
-    //            string r = voxelData[vIndex].render ? "1" : "0";
-    //            string line = r + "\n";
-    //            line += voxelData[vIndex].userId.ToString() + "\n";
-    //            line += voxelData[vIndex].color.r.ToString("F2") + "," +
-    //                voxelData[vIndex].color.g.ToString("F2") + "," +
-    //                voxelData[vIndex].color.b.ToString("F2") + "," +
-    //                voxelData[vIndex].color.a.ToString("F2") + "\n";
-    //            str = str + line;
-    //        }
-    //        string path = "F:/" + coords[index].ToString() + ".txt";
-
-    //        using (StreamWriter sw = new StreamWriter(path, false))
-    //        {
-    //            sw.Write(str);
-    //        }
-    //    }
-    //}
+        public void Execute(int chunkIndex)
+        {
+            string path = dir + "/" + coords[chunkIndex].ToString() + ".txt";
+            int startIndex = dataLength * chunkIndex;
+            using (StreamWriter sw = new StreamWriter(path, false))
+            {
+                for (int i = 0; i < dataLength; i++)
+                {
+                    int index = startIndex + i;
+                    if (voxelData[index].render != 0)
+                    {
+                        sw.WriteLine(i);
+                        sw.WriteLine(voxelData[index].userId);
+                        sw.WriteLine(voxelData[index].color);
+                    }
+                }
+            }
+        }
+    }
 }
