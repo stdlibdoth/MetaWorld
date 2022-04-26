@@ -19,20 +19,12 @@ public class VoxelChunk : MonoBehaviour
     private Mesh m_mesh;
     private MeshFilter m_meshFilter;
 
-    private List<Vector3> m_verts;
-    private List<Color> m_colors;
-    private List<int> m_tris;
-    private List<Vector3> m_normals;
-    //private Mesh.MeshDataArray meshDataArray;
-
-
     private List<BoxCollider> m_colliders;
     private Vector3Int m_drawRangeMin;
     private Vector3Int m_drawRangeMax;
 
     public Vector3Int drawRangeMin { get { return m_drawRangeMin; } }
     public Vector3Int drawRangeMax { get { return m_drawRangeMax; } }
-
     public MeshFilter meshFilter { get { return m_meshFilter; } }
 
 
@@ -42,11 +34,6 @@ public class VoxelChunk : MonoBehaviour
         m_mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
         m_meshFilter = GetComponent<MeshFilter>();
         m_meshFilter.mesh = m_mesh;
-
-        m_tris = new List<int>();
-        m_verts = new List<Vector3>();
-        m_colors = new List<Color>();
-        m_normals = new List<Vector3>();
 
         m_colliders = new List<BoxCollider>();
     }

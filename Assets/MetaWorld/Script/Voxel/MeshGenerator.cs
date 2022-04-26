@@ -12,8 +12,8 @@ using Unity.Mathematics;
 
 public class MeshGenerator : MonoBehaviour
 {
-    [SerializeField] private VoxelChunk m_chunkPrefab;
     [SerializeField] private ColliderSpawner m_colliderSpawner;
+    [SerializeField] private VoxelSpawner m_voxelChunkSpawner;
 
     [SerializeField] private float renderExtent;
     [SerializeField] private string m_voxelLayer;
@@ -66,6 +66,7 @@ public class MeshGenerator : MonoBehaviour
         m_meshGenBufferCount = 0;
         m_center = transform.position;
         m_colliderSpawner.Init(m_voxelLayer);
+        m_voxelChunkSpawner.Init();
         m_meshGenState = 0;
         m_meshDataArray = new Mesh.MeshDataArray();
     }
@@ -153,6 +154,12 @@ public class MeshGenerator : MonoBehaviour
                     Vector3Int chunkCoord = new Vector3Int(x, y, z);
                     bool updateMesh = (x == min.x - 1 || x == max.x + 1 || y == min.y - 1 || y == max.y + 1 || z == min.z - 1 || z == max.z + 1);
                     m_chunkData[chunkCoord] = RequestChuckData(chunkCoord, !updateMesh);
+                    if (!m_chunks.ContainsKey(chunkCoord))
+                    {
+                        VoxelChunk chunk = m_voxelChunkSpawner.Get().Init(new Vector3Int(x, y, z), size, this);
+                        chunk.transform.position = new Vector3(x, y, z) * VoxelManager.chunkSize;
+                        m_chunks[chunkCoord] = chunk;
+                    }
                 }
             }
         }
@@ -168,6 +175,28 @@ public class MeshGenerator : MonoBehaviour
         m_rangeX = new MinMaxInt(m_centerCoord.x - m_voxelExtent, m_centerCoord.x + m_voxelExtent - 1);
         m_rangeY = new MinMaxInt(m_centerCoord.y - m_voxelExtent, m_centerCoord.y + m_voxelExtent - 1);
         m_rangeZ = new MinMaxInt(m_centerCoord.z - m_voxelExtent, m_centerCoord.z + m_voxelExtent - 1);
+    }
+
+    private void LoadMeshData(Vector3Int min, Vector3Int max, bool update_mesh, bool checkRange)
+    {
+        for (int x = min.x; x <= max.x; x++)
+        {
+            for (int y = min.y; y <= max.y; y++)
+            {
+                for (int z = min.z; z <= max.z; z++)
+                {
+                    Vector3Int chunkCoord = new Vector3Int(x, y, z);
+                    if (!m_chunks.ContainsKey(chunkCoord))
+                    {
+                        VoxelChunk chunk = m_voxelChunkSpawner.Get().Init(new Vector3Int(x, y, z), VoxelManager.chunkSize, this);
+                        chunk.transform.position = new Vector3(x, y, z) * VoxelManager.chunkSize;
+                        m_chunks[chunkCoord] = chunk;
+                    }
+
+                    m_chunkData[chunkCoord] = RequestChuckData(chunkCoord, update_mesh);
+                }
+            }
+        }
     }
 
     private void UpdateMeshRange(Vector3Int min, Vector3Int max)
@@ -209,7 +238,7 @@ public class MeshGenerator : MonoBehaviour
 
                     if (!m_chunks.ContainsKey(chunkCoord))
                     {
-                        VoxelChunk chunk = Instantiate(m_chunkPrefab).Init(new Vector3Int(x, y, z), VoxelManager.chunkSize, this);
+                        VoxelChunk chunk = m_voxelChunkSpawner.Get().Init(new Vector3Int(x, y, z), VoxelManager.chunkSize, this);
                         chunk.transform.position = new Vector3(x, y, z) * VoxelManager.chunkSize;
                         m_chunks[chunkCoord] = chunk;
                     }
@@ -283,8 +312,8 @@ public class MeshGenerator : MonoBehaviour
                         Vector3Int coord = new Vector3Int(x, y, z);
                         if (m_chunks.ContainsKey(coord))
                         {
-                            m_chunks[coord].SetDrawRange(Vector3Int.zero, Vector3Int.zero);
-                            m_chunks[coord].gameObject.SetActive(false);
+                            m_voxelChunkSpawner.Release(m_chunks[coord]);
+                            m_chunks.Remove(coord);
                         }
                         if (!m_chunkData.ContainsKey(coord))
                             m_chunkData[coord] = RequestChuckData(coord, false);
@@ -318,12 +347,12 @@ public class MeshGenerator : MonoBehaviour
 
                     if (!m_chunks.ContainsKey(chunkCoord))
                     {
-                        VoxelChunk chunk = Instantiate(m_chunkPrefab).Init(new Vector3Int(x, y, z), VoxelManager.chunkSize, this);
+                        VoxelChunk chunk = m_voxelChunkSpawner.Get().Init(new Vector3Int(x, y, z), VoxelManager.chunkSize, this);
                         chunk.transform.position = new Vector3(x, y, z) * VoxelManager.chunkSize;
                         m_chunks[chunkCoord] = chunk;
                     }
 
-                    m_chunks[chunkCoord].gameObject.SetActive(true);
+                    //m_chunks[chunkCoord].gameObject.SetActive(true);
                     if (m_chunks[chunkCoord].drawRangeMin != drawRangeMin
                         || m_chunks[chunkCoord].drawRangeMax != drawRangeMax)
                     {

@@ -5,22 +5,19 @@ using DG.Tweening;
 
 public class GUIScript : MonoBehaviour
 {
+
+    [SerializeField] Texture m_btnTexture;
+
     private Transform m_meshTransform;
 
-    private GUIStyle m_guiStyle;
+    private GUIStyle m_textStyle;
+    private GUIStyle m_buttonStyle;
 
     private float m_prevTime;
     private float m_fps;
     private float m_prevDisplayTime;
     private float m_displayFps;
 
-
-
-    private void Awake()
-    {
-        m_guiStyle = new GUIStyle();
-        m_guiStyle.fontSize = 60;
-    }
 
     private void Update()
     {
@@ -35,8 +32,13 @@ public class GUIScript : MonoBehaviour
 
     private void OnGUI()
     {
-        GUI.Label(new Rect(100, 100, 300, 100), m_displayFps.ToString("F1"), m_guiStyle);
-        if (GUI.Button(new Rect(100, 300, 300, 100), "Click"))
+        m_textStyle = new GUIStyle(GUI.skin.label);
+        m_textStyle.fontSize = 60;
+        m_textStyle.normal.textColor = Color.black;
+        m_buttonStyle = new GUIStyle(GUI.skin.button);
+        m_buttonStyle.fontSize = 40;
+        GUI.Label(new Rect(100, 100, 300, 100), m_displayFps.ToString("F1"), m_textStyle);
+        if (GUI.Button(new Rect(100, 300, 300, 100), "Move", m_buttonStyle))
             Move();
     }
 

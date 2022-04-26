@@ -94,7 +94,6 @@ public class VoxelDataFormatter : IFormatter<Voxel[]>,IDisposable
 
         exportJobs.dataLength = VoxelManager.chunkSize * VoxelManager.chunkSize * VoxelManager.chunkSize;
         exportJobs.dir = VoxelManager.VoxelDataDir;
-        Debug.Log(batchSize);
         exportJobs.Schedule(batchSize, 10);
     }
 
