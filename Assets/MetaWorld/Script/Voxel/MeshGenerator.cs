@@ -113,7 +113,6 @@ public class MeshGenerator : MonoBehaviour
             Mesh[] meshes = new Mesh[m_genChunks.Length];
             int chunkCount = m_genChunks.Length;
             float length = VoxelManager.chunkSize * VoxelManager.voxelSize;
-            print(chunkCount);
             for (int i = 0; i < chunkCount; i++)
             {
                 meshes[i] = m_chunks[m_genChunks[i]].meshFilter.mesh;

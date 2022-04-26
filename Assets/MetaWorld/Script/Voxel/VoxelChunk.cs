@@ -27,8 +27,6 @@ public class VoxelChunk : MonoBehaviour
 
 
     private List<BoxCollider> m_colliders;
-    private Voxel[] m_voxels;
-
     private Vector3Int m_drawRangeMin;
     private Vector3Int m_drawRangeMax;
 
@@ -61,18 +59,10 @@ public class VoxelChunk : MonoBehaviour
         m_chunkSize = chunk_size;
         m_coord = coord;
         m_colliderSpawner = mesh_gen.ColliderSpawner;
-        m_voxels = new Voxel[chunk_size * chunk_size * chunk_size];
         name = coord.ToString();
         return this;
     }
 
-    public void SetVoxelData(Voxel[] voxel_data)
-    {
-        m_voxels = voxel_data;
-        int l = m_chunkSize * m_chunkSize * m_chunkSize;
-        if (m_voxels.Length != l)
-            m_voxels = new Voxel[l];
-    }
 
 
     public void SetDrawRange(Vector3Int min, Vector3Int max)
