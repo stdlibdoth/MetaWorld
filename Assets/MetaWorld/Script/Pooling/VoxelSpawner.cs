@@ -10,11 +10,9 @@ public class VoxelSpawner : MonoBehaviour
 
     public VoxelSpawner Init()
     {
-        m_chunkPool = new ObjectPool<VoxelChunk>(CreatePooledItem, OnGetFromPool, OnRelease, OnDestroyPoolObject, false, 1000, 80000);
+        m_chunkPool = new ObjectPool<VoxelChunk>(CreatePooledItem, OnGetFromPool, OnRelease, OnDestroyPoolObject, false, 100, 300);
         return this;
     }
-
-
 
     public VoxelChunk Get()
     {
@@ -41,7 +39,7 @@ public class VoxelSpawner : MonoBehaviour
 
     void OnGetFromPool(VoxelChunk chunk)
     {
-        chunk.gameObject.SetActive(true);
+        //chunk.gameObject.SetActive(true);
     }
 
     void OnDestroyPoolObject(VoxelChunk chunk)

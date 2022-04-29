@@ -8,3 +8,10 @@ public struct Voxel
     public int render;
     public Color color;
 }
+
+
+public struct VoxelCoordinate
+{
+    public Vector3Int chunkCoord;
+    public Vector3Int localCoord;
+}

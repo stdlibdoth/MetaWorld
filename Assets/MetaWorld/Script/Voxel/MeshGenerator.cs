@@ -10,7 +10,7 @@ using Unity.Burst;
 using Unity.Mathematics;
 
 
-public class MeshGenerator : MonoBehaviour
+public class MeshGenerator : MonoBehaviour,IMeshControl
 {
     [SerializeField] private ColliderSpawner m_colliderSpawner;
     [SerializeField] private VoxelSpawner m_voxelChunkSpawner;
@@ -33,6 +33,7 @@ public class MeshGenerator : MonoBehaviour
     private NativeList<Vector3Int> m_genChunks;
     private int m_meshGenState;
     private NativeQueue<Vector3Int> m_meshGenBuffer;
+    private NativeHashSet<Vector3Int> m_meshGenBufferHash;
     private int m_meshGenBufferCount;
 
 
@@ -52,6 +53,7 @@ public class MeshGenerator : MonoBehaviour
     private void OnDestroy()
     {
         m_meshGenBuffer.Dispose();
+        m_meshGenBufferHash.Dispose();
         m_genChunks.Dispose();
     }
 
@@ -62,6 +64,7 @@ public class MeshGenerator : MonoBehaviour
         m_exportingChunks = new HashSet<Vector3Int>();
         m_dataChangeFlag = new HashSet<Vector3Int>();
         m_meshGenBuffer = new NativeQueue<Vector3Int>(Allocator.Persistent);
+        m_meshGenBufferHash = new NativeHashSet<Vector3Int>(m_meshGenBatchSize, Allocator.Persistent);
         m_genChunks = new NativeList<Vector3Int>(Allocator.Persistent);
         m_meshGenBufferCount = 0;
         m_center = transform.position;
@@ -87,7 +90,7 @@ public class MeshGenerator : MonoBehaviour
         if (Vector3.Distance(transform.position, m_prevDrawPos) > m_updateDist)
         {
             UpdateVoxelRange();
-            UpdateChunks();
+            UpdateAllChunks();
             m_prevDrawPos = transform.position;
         }
 
@@ -102,6 +105,7 @@ public class MeshGenerator : MonoBehaviour
                 Vector3Int genChunk = m_meshGenBuffer.Dequeue();
                 min[i] = m_chunks[genChunk].drawRangeMin;
                 max[i] = m_chunks[genChunk].drawRangeMax;
+                m_meshGenBufferHash.Remove(genChunk);
                 m_genChunks.Add(genChunk);
                 m_meshGenBufferCount--;
             }
@@ -129,14 +133,163 @@ public class MeshGenerator : MonoBehaviour
 
     #endregion
 
-    public Voxel[] GetVoxelData(Vector3Int chunk_coord)
+    #region IMeshControl Implement
+
+    public VoxelCoordinate GetVoxelCoordinate(Vector3Int world_coord)
     {
-        if (m_chunkData.ContainsKey(chunk_coord))
+        return GetVoxelCoordInternal(world_coord,VoxelManager.chunkSize);
+    }
+
+    public Vector3Int GetChunkCoordinate(Vector3Int world_coord)
+    {
+        return GetChunk(world_coord);
+    }
+
+    public Voxel GetVoxelData(Vector3Int world_coord)
+    {
+        VoxelCoordinate vc = GetVoxelCoordInternal(world_coord, VoxelManager.chunkSize);
+        int localIndex = CoordToIndex(vc.localCoord, VoxelManager.chunkSize);
+        return m_chunkData[vc.chunkCoord][localIndex];
+    }
+
+    public Voxel[] GetRangedVoxelData(Vector3Int min, Vector3Int max)
+    {
+        int sizeX = max.x - min.x + 1;
+        int sizeY = max.y - min.y + 1;
+        int sizeZ = max.z - min.z + 1;
+        int length = sizeX * sizeY * sizeZ;
+        Voxel[] data = new Voxel[length];
+        for (int x = min.x; x <= max.x; x++)
+        {
+            for (int y = min.y; y <= max.y; y++)
+            {
+                for (int z = min.z; z <= max.z; z++)
+                {
+                    VoxelCoordinate vc = GetVoxelCoordInternal(new Vector3Int(x,y,z), VoxelManager.chunkSize);
+                    int localIndex = CoordToIndex(vc.localCoord, VoxelManager.chunkSize);
+                    data[z * sizeX * sizeY + y * sizeX + x] = m_chunkData[vc.chunkCoord][localIndex];
+                }
+            }
+        }
+        return data;
+    }
+
+    public void SetVoxelData(Vector3Int world_coord, Voxel data)
+    {
+        VoxelCoordinate coord = GetVoxelCoordInternal(world_coord, VoxelManager.chunkSize);
+        if (!m_chunkData.ContainsKey(coord.chunkCoord))
+            m_chunkData[coord.chunkCoord] = new Voxel[VoxelManager.dataLength];
+        m_chunkData[coord.chunkCoord][CoordToIndex(coord.localCoord,VoxelManager.chunkSize)] = data;
+    }
+
+    public Voxel[] GetChunkData(Vector3Int chunk_coord, bool copy_data)
+    {
+        if (m_chunkData.ContainsKey(chunk_coord) && !copy_data)
             return m_chunkData[chunk_coord];
+        else if(m_chunkData.ContainsKey(chunk_coord) && copy_data)
+        {
+            int length = m_chunkData[chunk_coord].Length;
+            Voxel[] data = new Voxel[length];
+            for (int i = 0; i < length; i++)
+            {
+                data[i] = m_chunkData[chunk_coord][i];
+            }
+            return data;
+        }
         return new Voxel[VoxelManager.chunkSize* VoxelManager.chunkSize* VoxelManager.chunkSize];
     }
 
+    public void SetChunkData(Vector3Int chunk_coord, Voxel[] data)
+    {
+        int length = VoxelManager.chunkSize * VoxelManager.chunkSize * VoxelManager.chunkSize;
+        Voxel[] d = new Voxel[length];
+        length = length < data.Length ? length : data.Length;
+        for (int i = 0; i < length; i++)
+        {
+            d[i] = data[i];
+        }
+        m_chunkData[chunk_coord] = d;
+    }
 
+    public void UpdateChunkMeshes(Vector3Int min, Vector3Int max, bool load_data = false, bool check_range = false)
+    {
+        if (check_range)
+            UpdateMeshRange(min, max);
+
+        for (int x = min.x; x <= max.x; x++)
+        {
+            for (int y = min.y; y <= max.y; y++)
+            {
+                for (int z = min.z; z <= max.z; z++)
+                {
+                    Vector3Int chunkCoord = new Vector3Int(x, y, z);
+                    if (!m_chunks.ContainsKey(chunkCoord))
+                        SpawnVoxelChunk(new Vector3Int(x, y, z)).gameObject.SetActive(true);
+                    if (load_data)
+                        m_chunkData[chunkCoord] = RequestChuckData(chunkCoord, true);
+                    else
+                        BufferMeshGen(chunkCoord);
+                }
+            }
+        }
+    }
+
+    public void LoadMeshData(Vector3Int min, Vector3Int max, bool update_mesh = false, bool show_mesh = false, bool check_range = false)
+    {
+        if (check_range)
+            UpdateMeshRange(min, max);
+
+        for (int x = min.x; x <= max.x; x++)
+        {
+            for (int y = min.y; y <= max.y; y++)
+            {
+                for (int z = min.z; z <= max.z; z++)
+                {
+                    Vector3Int chunkCoord = new Vector3Int(x, y, z);
+                    if (update_mesh && !m_chunks.ContainsKey(chunkCoord))
+                    {
+                        SpawnVoxelChunk(new Vector3Int(x, y, z)).gameObject.SetActive(show_mesh);
+                    }
+                    m_chunkData[chunkCoord] = RequestChuckData(chunkCoord, update_mesh);
+                }
+            }
+        }
+    }
+
+    public void UpdateChunkMesh(Vector3Int chunk, bool load_data = false, bool check_range = false)
+    {
+        if (check_range)
+            UpdateMeshRange(chunk, chunk);
+
+        if (!m_chunks.ContainsKey(chunk))
+            SpawnVoxelChunk(chunk).gameObject.SetActive(true);
+        if (load_data)
+            m_chunkData[chunk] = RequestChuckData(chunk, true);
+        else
+            BufferMeshGen(chunk);
+    }
+
+    public void LoadMeshData(Vector3Int chunk, bool update_mesh = false, bool show_mesh = false, bool check_range = false)
+    {
+        if (check_range)
+            UpdateMeshRange(chunk, chunk);
+
+        if (update_mesh && !m_chunks.ContainsKey(chunk))
+        {
+            SpawnVoxelChunk(chunk).gameObject.SetActive(show_mesh);
+        }
+        m_chunkData[chunk] = RequestChuckData(chunk, update_mesh);
+    }
+
+    #endregion
+
+    private VoxelChunk SpawnVoxelChunk(Vector3Int chunk_coord)
+    {
+        VoxelChunk chunk = m_voxelChunkSpawner.Get().Init(chunk_coord, VoxelManager.chunkSize, this);
+        chunk.transform.position = chunk_coord * VoxelManager.chunkSize;
+        m_chunks[chunk_coord] = chunk;
+        return chunk;
+    }
 
     private void LoadInitialChunkData()
     {
@@ -156,9 +309,7 @@ public class MeshGenerator : MonoBehaviour
                     m_chunkData[chunkCoord] = RequestChuckData(chunkCoord, !updateMesh);
                     if (!m_chunks.ContainsKey(chunkCoord))
                     {
-                        VoxelChunk chunk = m_voxelChunkSpawner.Get().Init(new Vector3Int(x, y, z), size, this);
-                        chunk.transform.position = new Vector3(x, y, z) * VoxelManager.chunkSize;
-                        m_chunks[chunkCoord] = chunk;
+                        SpawnVoxelChunk(new Vector3Int(x, y, z)).gameObject.SetActive(true);
                     }
                 }
             }
@@ -175,28 +326,6 @@ public class MeshGenerator : MonoBehaviour
         m_rangeX = new MinMaxInt(m_centerCoord.x - m_voxelExtent, m_centerCoord.x + m_voxelExtent - 1);
         m_rangeY = new MinMaxInt(m_centerCoord.y - m_voxelExtent, m_centerCoord.y + m_voxelExtent - 1);
         m_rangeZ = new MinMaxInt(m_centerCoord.z - m_voxelExtent, m_centerCoord.z + m_voxelExtent - 1);
-    }
-
-    private void LoadMeshData(Vector3Int min, Vector3Int max, bool update_mesh, bool checkRange)
-    {
-        for (int x = min.x; x <= max.x; x++)
-        {
-            for (int y = min.y; y <= max.y; y++)
-            {
-                for (int z = min.z; z <= max.z; z++)
-                {
-                    Vector3Int chunkCoord = new Vector3Int(x, y, z);
-                    if (!m_chunks.ContainsKey(chunkCoord))
-                    {
-                        VoxelChunk chunk = m_voxelChunkSpawner.Get().Init(new Vector3Int(x, y, z), VoxelManager.chunkSize, this);
-                        chunk.transform.position = new Vector3(x, y, z) * VoxelManager.chunkSize;
-                        m_chunks[chunkCoord] = chunk;
-                    }
-
-                    m_chunkData[chunkCoord] = RequestChuckData(chunkCoord, update_mesh);
-                }
-            }
-        }
     }
 
     private void UpdateMeshRange(Vector3Int min, Vector3Int max)
@@ -238,9 +367,7 @@ public class MeshGenerator : MonoBehaviour
 
                     if (!m_chunks.ContainsKey(chunkCoord))
                     {
-                        VoxelChunk chunk = m_voxelChunkSpawner.Get().Init(new Vector3Int(x, y, z), VoxelManager.chunkSize, this);
-                        chunk.transform.position = new Vector3(x, y, z) * VoxelManager.chunkSize;
-                        m_chunks[chunkCoord] = chunk;
+                        SpawnVoxelChunk(new Vector3Int(x, y, z)).gameObject.SetActive(true);
                     }
 
                     if (m_chunks[chunkCoord].drawRangeMin != drawRangeMin
@@ -253,7 +380,7 @@ public class MeshGenerator : MonoBehaviour
         }
     }
 
-    private void UpdateChunks()
+    private void UpdateAllChunks()
     {
         Vector3Int min = GetChunk(new Vector3Int(m_rangeX.min, m_rangeY.min, m_rangeZ.min));
         Vector3Int max = GetChunk(new Vector3Int(m_rangeX.max, m_rangeY.max, m_rangeZ.max));
@@ -342,14 +469,12 @@ public class MeshGenerator : MonoBehaviour
 
                     Vector3Int drawRangeMin = new Vector3Int(xMin, yMin, zMin);
                     Vector3Int drawRangeMax = new Vector3Int(xMax, yMax, zMax);
-                    //    print("Set: "+ chunkCoord+ " " + drawRangeMin + " " + drawRangeMax + " " + m_rangeX.max + "  " + max);
+                    //print("Set: "+ chunkCoord+ " " + drawRangeMin + " " + drawRangeMax + " " + m_rangeX.max + "  " + max);
 
 
                     if (!m_chunks.ContainsKey(chunkCoord))
                     {
-                        VoxelChunk chunk = m_voxelChunkSpawner.Get().Init(new Vector3Int(x, y, z), VoxelManager.chunkSize, this);
-                        chunk.transform.position = new Vector3(x, y, z) * VoxelManager.chunkSize;
-                        m_chunks[chunkCoord] = chunk;
+                        SpawnVoxelChunk(new Vector3Int(x, y, z)).gameObject.SetActive(true);
                     }
 
                     //m_chunks[chunkCoord].gameObject.SetActive(true);
@@ -387,22 +512,53 @@ public class MeshGenerator : MonoBehaviour
         return v;
     }
 
-
-    private Vector3Int GetChunk(Vector3Int coord)
+    private Vector3Int GetChunk(Vector3Int voxel_coord)
     {
-        int[] xyz = new int[] { coord.x, coord.y, coord.z };
+        int[] xyz = new int[] { voxel_coord.x, voxel_coord.y, voxel_coord.z };
 
         for (int i = 0; i < xyz.Length; i++)
         {
-            xyz[i] = ((xyz[i] - step(xyz[i])) / VoxelManager.chunkSize) + step(xyz[i]);
+            xyz[i] = ((xyz[i] - Step(xyz[i])) / VoxelManager.chunkSize) + Step(xyz[i]);
         }
         return new Vector3Int(xyz[0], xyz[1], xyz[2]);
     }
-
-    private int step(int num)
+    
+    [BurstCompile]
+    private VoxelCoordinate GetVoxelCoordInternal(Vector3Int world_coord,int chunk_size)
     {
-        int step = Mathf.Sign(num) == -1 ? -1 : 0;
-        return step;
+        NativeArray<int> xyz = new NativeArray<int>(3, Allocator.Temp);
+        NativeArray<int> xyz1 = new NativeArray<int>(3, Allocator.Temp);
+        xyz[0] = xyz1[0] = world_coord.x;
+        xyz[1] = xyz1[1] = world_coord.y;
+        xyz[2] = xyz1[2] = world_coord.z;
+
+        for (int i = 0; i < xyz.Length; i++)
+        {
+            int step = math.select(0, -1, xyz[i] < 0);
+            xyz[i] = ((xyz[i] - step) / chunk_size) + step;
+            xyz1[i] = (-step * chunk_size) - (math.abs(xyz1[i]) % (chunk_size - step));
+        }
+
+        Vector3Int chunk = new Vector3Int(xyz[0], xyz[1], xyz[2]);
+        Vector3Int local = new Vector3Int(xyz1[0], xyz1[1], xyz1[2]);
+        xyz.Dispose();
+        xyz1.Dispose();
+        return new VoxelCoordinate
+        {
+            chunkCoord = chunk,
+            localCoord = local,
+        };
+    }
+
+    [BurstCompile]
+    private int Step(int num)
+    {
+        return math.select(0, -1, num < 0);
+    }
+
+    private int CoordToIndex(Vector3Int coord, int dimension)
+    {
+        return coord.z * (dimension * dimension) + coord.y * dimension + coord.x;
     }
 
     public void ReadVoxelData(string path)
@@ -480,7 +636,10 @@ public class MeshGenerator : MonoBehaviour
 
     private void BufferMeshGen(Vector3Int coord)
     {
+        if (m_meshGenBufferHash.Contains(coord))
+            return;
         m_meshGenBuffer.Enqueue(coord);
+        m_meshGenBufferHash.Add(coord);
         m_meshGenBufferCount++;
     }
 
@@ -612,9 +771,6 @@ public class MeshGenerator : MonoBehaviour
             {
                 return coord.z * (dimension * dimension) + coord.y * dimension + coord.x;
             }
-
-            float voxelSize = _voxelSize[0];
-            int size = _chunkSize[0];
             int startIndex = index * _chunkSize[0] * _chunkSize[0] * _chunkSize[0];
             Vector3Int chunkCoord = chunkCoords[index];
             for (int x = drawRangeMin[index].x; x <= drawRangeMax[index].x; x++)
@@ -624,7 +780,7 @@ public class MeshGenerator : MonoBehaviour
                     for (int z = drawRangeMin[index].z; z <= drawRangeMax[index].z; z++)
                     {
                         Vector3Int localCoord = new Vector3Int(x, y, z);
-                        int localIndex = Coord2Index(localCoord, size);
+                        int localIndex = Coord2Index(localCoord, _chunkSize[0]);
                         //print(localCoord + "  " + localIndex);
                         Voxel voxel = voxelData[startIndex + localIndex];
                         if (voxel.render == 0)
@@ -634,26 +790,26 @@ public class MeshGenerator : MonoBehaviour
                         Voxel back;
                         if (localCoord.z == 0)
                         {
-                            Vector3Int otherLocalCoord = new Vector3Int(localCoord.x, localCoord.y, size - 1);
+                            Vector3Int otherLocalCoord = new Vector3Int(localCoord.x, localCoord.y, _chunkSize[0] - 1);
                             int i = chunkCoords.IndexOf(chunkCoord + Vector3Int.back);
                             if (i!= -1)
                             {
-                                int otherStartIndex = i * size * size * size;
-                                back = voxelData[otherStartIndex + Coord2Index(otherLocalCoord, size)];                          
+                                int otherStartIndex = i * _chunkSize[0] * _chunkSize[0] * _chunkSize[0];
+                                back = voxelData[otherStartIndex + Coord2Index(otherLocalCoord, _chunkSize[0])];                          
                             }
                             else
                                 back = new Voxel();
                         }
                         else
-                            back = voxelData[startIndex + Coord2Index(localCoord + Vector3Int.back, size)];
+                            back = voxelData[startIndex + Coord2Index(localCoord + Vector3Int.back, _chunkSize[0])];
                         if (back.render == 0)
                         {
                             //print(chunkCoord + " " + localCoord);
                             NativeArray<Vector3> vertices = new NativeArray<Vector3>(4, Allocator.Temp);
-                            vertices[0] = new Vector3(localCoord.x * voxelSize, localCoord.y * voxelSize, localCoord.z * voxelSize);
-                            vertices[1] = new Vector3(localCoord.x * voxelSize, (localCoord.y + 1) * voxelSize, localCoord.z * voxelSize);
-                            vertices[2] = new Vector3((localCoord.x + 1) * voxelSize, (localCoord.y + 1) * voxelSize, localCoord.z * voxelSize);
-                            vertices[3] = new Vector3((localCoord.x + 1) * voxelSize, localCoord.y * voxelSize, localCoord.z * voxelSize);
+                            vertices[0] = new Vector3(localCoord.x * _voxelSize[0], localCoord.y * _voxelSize[0], localCoord.z * _voxelSize[0]);
+                            vertices[1] = new Vector3(localCoord.x * _voxelSize[0], (localCoord.y + 1) * _voxelSize[0], localCoord.z * _voxelSize[0]);
+                            vertices[2] = new Vector3((localCoord.x + 1) * _voxelSize[0], (localCoord.y + 1) * _voxelSize[0], localCoord.z * _voxelSize[0]);
+                            vertices[3] = new Vector3((localCoord.x + 1) * _voxelSize[0], localCoord.y * _voxelSize[0], localCoord.z * _voxelSize[0]);
                             DrawQuad(vertices, VoxelDirection.Back, voxel.color);
                             vertices.Dispose();
                         }
@@ -661,27 +817,27 @@ public class MeshGenerator : MonoBehaviour
 
                         //forward---------------------------------------------------
                         Voxel forward;
-                        if (localCoord.z == size - 1)
+                        if (localCoord.z == _chunkSize[0] - 1)
                         {
                             Vector3Int otherLocalCoord = new Vector3Int(localCoord.x, localCoord.y, 0);
                             int i = chunkCoords.IndexOf(chunkCoord + Vector3Int.forward);
                             if (i != -1)
                             {
-                                int otherStartIndex = i * size * size * size;
-                                forward = voxelData[otherStartIndex + Coord2Index(otherLocalCoord, size)];
+                                int otherStartIndex = i * _chunkSize[0] * _chunkSize[0] * _chunkSize[0];
+                                forward = voxelData[otherStartIndex + Coord2Index(otherLocalCoord, _chunkSize[0])];
                             }
                             else
                                 forward = new Voxel();
                         }
                         else
-                            forward = voxelData[startIndex + Coord2Index(localCoord + Vector3Int.forward, size)];
+                            forward = voxelData[startIndex + Coord2Index(localCoord + Vector3Int.forward, _chunkSize[0])];
                         if (forward.render == 0)
                         {
                             NativeArray<Vector3> vertices = new NativeArray<Vector3>(4, Allocator.Temp);
-                            vertices[0] = new Vector3((localCoord.x + 1) * voxelSize, localCoord.y * voxelSize, (localCoord.z + 1) * voxelSize);
-                            vertices[1] = new Vector3((localCoord.x + 1) * voxelSize, (localCoord.y + 1) * voxelSize, (localCoord.z + 1) * voxelSize);
-                            vertices[2] = new Vector3(localCoord.x * voxelSize, (localCoord.y + 1) * voxelSize, (localCoord.z + 1) * voxelSize);
-                            vertices[3] = new Vector3(localCoord.x * voxelSize, localCoord.y * voxelSize, (localCoord.z + 1) * voxelSize);
+                            vertices[0] = new Vector3((localCoord.x + 1) * _voxelSize[0], localCoord.y * _voxelSize[0], (localCoord.z + 1) * _voxelSize[0]);
+                            vertices[1] = new Vector3((localCoord.x + 1) * _voxelSize[0], (localCoord.y + 1) * _voxelSize[0], (localCoord.z + 1) * _voxelSize[0]);
+                            vertices[2] = new Vector3(localCoord.x * _voxelSize[0], (localCoord.y + 1) * _voxelSize[0], (localCoord.z + 1) * _voxelSize[0]);
+                            vertices[3] = new Vector3(localCoord.x * _voxelSize[0], localCoord.y * _voxelSize[0], (localCoord.z + 1) * _voxelSize[0]);
                             DrawQuad(vertices, VoxelDirection.Forward, voxel.color);
                             vertices.Dispose();
                         }
@@ -690,52 +846,52 @@ public class MeshGenerator : MonoBehaviour
                         Voxel left;
                         if (localCoord.x == 0)
                         {
-                            Vector3Int otherLocalCoord = new Vector3Int(size - 1, localCoord.y, localCoord.z);
+                            Vector3Int otherLocalCoord = new Vector3Int(_chunkSize[0] - 1, localCoord.y, localCoord.z);
                             int i = chunkCoords.IndexOf(chunkCoord + Vector3Int.left);
                             if (i != -1)
                             {
-                                int otherStartIndex = i * size * size * size;
-                                left = voxelData[otherStartIndex + Coord2Index(otherLocalCoord, size)];
+                                int otherStartIndex = i * _chunkSize[0] * _chunkSize[0] * _chunkSize[0];
+                                left = voxelData[otherStartIndex + Coord2Index(otherLocalCoord, _chunkSize[0])];
                             }
                             else
                                 left = new Voxel();
                         }
                         else
-                            left = voxelData[startIndex + Coord2Index(localCoord + Vector3Int.left, size)];
+                            left = voxelData[startIndex + Coord2Index(localCoord + Vector3Int.left, _chunkSize[0])];
                         if (left.render == 0)
                         {
                             NativeArray<Vector3> vertices = new NativeArray<Vector3>(4, Allocator.Temp);
-                            vertices[0] = new Vector3(localCoord.x * voxelSize, localCoord.y * voxelSize, (localCoord.z + 1) * voxelSize);
-                            vertices[1] = new Vector3(localCoord.x * voxelSize, (localCoord.y + 1) * voxelSize, (localCoord.z + 1) * voxelSize);
-                            vertices[2] = new Vector3(localCoord.x * voxelSize, (localCoord.y + 1) * voxelSize, localCoord.z * voxelSize);
-                            vertices[3] = new Vector3(localCoord.x * voxelSize, localCoord.y * voxelSize, localCoord.z * voxelSize);
+                            vertices[0] = new Vector3(localCoord.x * _voxelSize[0], localCoord.y * _voxelSize[0], (localCoord.z + 1) * _voxelSize[0]);
+                            vertices[1] = new Vector3(localCoord.x * _voxelSize[0], (localCoord.y + 1) * _voxelSize[0], (localCoord.z + 1) * _voxelSize[0]);
+                            vertices[2] = new Vector3(localCoord.x * _voxelSize[0], (localCoord.y + 1) * _voxelSize[0], localCoord.z * _voxelSize[0]);
+                            vertices[3] = new Vector3(localCoord.x * _voxelSize[0], localCoord.y * _voxelSize[0], localCoord.z * _voxelSize[0]);
                             DrawQuad(vertices, VoxelDirection.Left, voxel.color);
                             vertices.Dispose();
                         }
 
                         //right-------------------------------------------------------------
                         Voxel right;
-                        if (localCoord.x == size - 1)
+                        if (localCoord.x == _chunkSize[0] - 1)
                         {
                             Vector3Int otherLocalCoord = new Vector3Int(0, localCoord.y, localCoord.z);
                             int i = chunkCoords.IndexOf(chunkCoord + Vector3Int.right);
                             if (i != -1)
                             {
-                                int otherStartIndex = i * size * size * size;
-                                right = voxelData[otherStartIndex + Coord2Index(otherLocalCoord, size)];
+                                int otherStartIndex = i * _chunkSize[0] * _chunkSize[0] * _chunkSize[0];
+                                right = voxelData[otherStartIndex + Coord2Index(otherLocalCoord, _chunkSize[0])];
                             }
                             else
                                 right = new Voxel();
                         }
                         else
-                            right = voxelData[startIndex + Coord2Index(localCoord + Vector3Int.right, size)];
+                            right = voxelData[startIndex + Coord2Index(localCoord + Vector3Int.right, _chunkSize[0])];
                         if (right.render == 0)
                         {
                             NativeArray<Vector3> vertices = new NativeArray<Vector3>(4, Allocator.Temp);
-                            vertices[0] = new Vector3((localCoord.x + 1) * voxelSize, localCoord.y * voxelSize, localCoord.z * voxelSize);
-                            vertices[1] = new Vector3((localCoord.x + 1) * voxelSize, (localCoord.y + 1) * voxelSize, localCoord.z * voxelSize);
-                            vertices[2] = new Vector3((localCoord.x + 1) * voxelSize, (localCoord.y + 1) * voxelSize, (localCoord.z + 1) * voxelSize);
-                            vertices[3] = new Vector3((localCoord.x + 1) * voxelSize, localCoord.y * voxelSize, (localCoord.z + 1) * voxelSize);
+                            vertices[0] = new Vector3((localCoord.x + 1) * _voxelSize[0], localCoord.y * _voxelSize[0], localCoord.z * _voxelSize[0]);
+                            vertices[1] = new Vector3((localCoord.x + 1) * _voxelSize[0], (localCoord.y + 1) * _voxelSize[0], localCoord.z * _voxelSize[0]);
+                            vertices[2] = new Vector3((localCoord.x + 1) * _voxelSize[0], (localCoord.y + 1) * _voxelSize[0], (localCoord.z + 1) * _voxelSize[0]);
+                            vertices[3] = new Vector3((localCoord.x + 1) * _voxelSize[0], localCoord.y * _voxelSize[0], (localCoord.z + 1) * _voxelSize[0]);
                             DrawQuad(vertices, VoxelDirection.Right, voxel.color);
                             vertices.Dispose();
                         }
@@ -744,52 +900,52 @@ public class MeshGenerator : MonoBehaviour
                         Voxel down;
                         if (localCoord.y == 0)
                         {
-                            Vector3Int otherLocalCoord = new Vector3Int(localCoord.x, size - 1, localCoord.z);
+                            Vector3Int otherLocalCoord = new Vector3Int(localCoord.x, _chunkSize[0] - 1, localCoord.z);
                             int i = chunkCoords.IndexOf(chunkCoord + Vector3Int.down);
                             if (i != -1)
                             {
-                                int otherStartIndex = i * size * size * size;
-                                down = voxelData[otherStartIndex + Coord2Index(otherLocalCoord, size)];
+                                int otherStartIndex = i * _chunkSize[0] * _chunkSize[0] * _chunkSize[0];
+                                down = voxelData[otherStartIndex + Coord2Index(otherLocalCoord, _chunkSize[0])];
                             }
                             else
                                 down = new Voxel();
                         }
                         else
-                            down = voxelData[startIndex + Coord2Index(localCoord + Vector3Int.down, size)];
+                            down = voxelData[startIndex + Coord2Index(localCoord + Vector3Int.down, _chunkSize[0])];
                         if (down.render == 0)
                         {
                             NativeArray<Vector3> vertices = new NativeArray<Vector3>(4, Allocator.Temp);
-                            vertices[0] = new Vector3(localCoord.x * voxelSize, localCoord.y * voxelSize, (localCoord.z + 1) * voxelSize);
-                            vertices[1] = new Vector3(localCoord.x * voxelSize, localCoord.y * voxelSize, localCoord.z * voxelSize);
-                            vertices[2] = new Vector3((localCoord.x + 1) * voxelSize, localCoord.y * voxelSize, localCoord.z * voxelSize);
-                            vertices[3] = new Vector3((localCoord.x + 1) * voxelSize, localCoord.y * voxelSize, (localCoord.z + 1) * voxelSize);
+                            vertices[0] = new Vector3(localCoord.x * _voxelSize[0], localCoord.y * _voxelSize[0], (localCoord.z + 1) * _voxelSize[0]);
+                            vertices[1] = new Vector3(localCoord.x * _voxelSize[0], localCoord.y * _voxelSize[0], localCoord.z * _voxelSize[0]);
+                            vertices[2] = new Vector3((localCoord.x + 1) * _voxelSize[0], localCoord.y * _voxelSize[0], localCoord.z * _voxelSize[0]);
+                            vertices[3] = new Vector3((localCoord.x + 1) * _voxelSize[0], localCoord.y * _voxelSize[0], (localCoord.z + 1) * _voxelSize[0]);
                             DrawQuad(vertices, VoxelDirection.Down, voxel.color);
                             vertices.Dispose();
                         }
 
                         //up--------------------------------------------------------------
                         Voxel up;
-                        if (localCoord.y == size - 1)
+                        if (localCoord.y == _chunkSize[0] - 1)
                         {
                             Vector3Int otherLocalCoord = new Vector3Int(localCoord.x, 0, localCoord.z);
                             int i = chunkCoords.IndexOf(chunkCoord + Vector3Int.up);
                             if (i != -1)
                             {
-                                int otherStartIndex = i * size * size * size;
-                                up = voxelData[otherStartIndex + Coord2Index(otherLocalCoord, size)];
+                                int otherStartIndex = i * _chunkSize[0] * _chunkSize[0] * _chunkSize[0];
+                                up = voxelData[otherStartIndex + Coord2Index(otherLocalCoord, _chunkSize[0])];
                             }
                             else
                                 up = new Voxel();
                         }
                         else
-                            up = voxelData[startIndex + Coord2Index(localCoord + Vector3Int.up, size)];
+                            up = voxelData[startIndex + Coord2Index(localCoord + Vector3Int.up, _chunkSize[0])];
                         if (up.render == 0)
                         {
                             NativeArray<Vector3> vertices = new NativeArray<Vector3>(4, Allocator.Temp);
-                            vertices[0] = new Vector3(localCoord.x * voxelSize, (localCoord.y + 1) * voxelSize, localCoord.z * voxelSize);
-                            vertices[1] = new Vector3(localCoord.x * voxelSize, (localCoord.y + 1) * voxelSize, (localCoord.z + 1) * voxelSize);
-                            vertices[2] = new Vector3((localCoord.x + 1) * voxelSize, (localCoord.y + 1) * voxelSize, (localCoord.z + 1) * voxelSize);
-                            vertices[3] = new Vector3((localCoord.x + 1) * voxelSize, (localCoord.y + 1) * voxelSize, localCoord.z * voxelSize);
+                            vertices[0] = new Vector3(localCoord.x * _voxelSize[0], (localCoord.y + 1) * _voxelSize[0], localCoord.z * _voxelSize[0]);
+                            vertices[1] = new Vector3(localCoord.x * _voxelSize[0], (localCoord.y + 1) * _voxelSize[0], (localCoord.z + 1) * _voxelSize[0]);
+                            vertices[2] = new Vector3((localCoord.x + 1) * _voxelSize[0], (localCoord.y + 1) * _voxelSize[0], (localCoord.z + 1) * _voxelSize[0]);
+                            vertices[3] = new Vector3((localCoord.x + 1) * _voxelSize[0], (localCoord.y + 1) * _voxelSize[0], localCoord.z * _voxelSize[0]);
                             DrawQuad(vertices, VoxelDirection.Up, voxel.color);
                             vertices.Dispose();
                         }

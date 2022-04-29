@@ -26,7 +26,7 @@ public class FrameTimer
     {
         get { return m_IsCountingFlag; }
     }
-
+     
 
     public FrameTimer(int frame_Interval, FrameTimerMode mode)
     {

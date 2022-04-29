@@ -1,12 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using System.Threading;
-using System.Threading.Tasks;
-using Unity.Jobs;
-using Unity.Burst;
-using UnityEngine.Rendering;
-using Unity.Collections;
 
 [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
 public class VoxelChunk : MonoBehaviour

@@ -32,6 +32,11 @@ public static class Extensions
         int i = Mathf.Abs(((int)dir + VoxelDirections.directionCount + steps) % VoxelDirections.directionCount);
         return (VoxelDirection)i;
     }
+
+    public static int CoordToIndex(this Vector3Int coord, Vector3Int dimension)
+    {
+        return coord.z * (dimension.x * dimension.y) + coord.y * dimension.x + coord.x;
+    }
 }
 
 

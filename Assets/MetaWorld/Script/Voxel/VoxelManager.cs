@@ -22,6 +22,9 @@ public class VoxelManager : MonoBehaviour
 
     public static float voxelSize { get { return m_singleton.m_voxelSize; } }
     public static int chunkSize { get { return m_singleton.m_chunkSize; } }
+
+    public static int dataLength { get { return m_singleton.m_chunkSize * m_singleton.m_chunkSize * m_singleton.m_chunkSize; } }
+
     public static string VoxelDataDir { get { return m_singleton.m_voxelDataDir; } }
 
     public static bool isReadingData { get { return m_singleton.m_voxelDataFormatter.ReadingTaskCount != 0; } }
