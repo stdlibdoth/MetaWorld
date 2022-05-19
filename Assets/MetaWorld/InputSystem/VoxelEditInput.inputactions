@@ -1,0 +1,326 @@
+{
+    "name": "VoxelEditInput",
+    "maps": [
+        {
+            "name": "SingleEditing",
+            "id": "69e20acb-d26e-498f-80c6-c65a1198c523",
+            "actions": [
+                {
+                    "name": "Spawn",
+                    "type": "Button",
+                    "id": "84b3174b-1b98-4d35-971a-d9b2cfb78f46",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "Hold(duration=0.3)",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "Delete",
+                    "type": "Button",
+                    "id": "61a10e0f-d880-4237-8b6a-dcba1c76d96f",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "Hold(duration=0.3)",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "InputMove",
+                    "type": "Value",
+                    "id": "045afad0-6779-4ce8-8c41-d5b25c4d3f58",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                }
+            ],
+            "bindings": [
+                {
+                    "name": "",
+                    "id": "ad5a3810-deaf-4155-b34b-1533a2915373",
+                    "path": "<Mouse>/leftButton",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Spawn",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "d4f1b29b-1494-4bd2-906e-9ed74bc5f1c1",
+                    "path": "<XRController>{RightHand}/triggerPressed",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Spawn",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "de80d86b-fab4-44cf-a03b-e751a53820de",
+                    "path": "<Touchscreen>/Press",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Spawn",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "d5e15d4f-3fae-4c9c-b831-4e3dc657eac7",
+                    "path": "<Mouse>/rightButton",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Delete",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "91901f1f-a860-46a7-a2e1-3642ed064f3b",
+                    "path": "<Mouse>/position",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "InputMove",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                }
+            ]
+        },
+        {
+            "name": "RectAreaEditing",
+            "id": "4ff92884-a2b3-43e3-83bf-a6a03efd4510",
+            "actions": [
+                {
+                    "name": "AreaSelecting",
+                    "type": "Button",
+                    "id": "f821c767-266b-4e93-9d88-0940d668c3bd",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "Hold",
+                    "initialStateCheck": false
+                }
+            ],
+            "bindings": [
+                {
+                    "name": "",
+                    "id": "bd830baf-b0d7-42fe-97ae-0537e1e8b391",
+                    "path": "<Mouse>/leftButton",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "AreaSelecting",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                }
+            ]
+        },
+        {
+            "name": "ShortcutActions",
+            "id": "abe2a332-63ec-49d7-84af-04f4ab3f66c4",
+            "actions": [
+                {
+                    "name": "EnterNavigation",
+                    "type": "Button",
+                    "id": "76f81267-a67c-4488-9648-9c054e5a9768",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "EnterSingleEditing",
+                    "type": "Button",
+                    "id": "0c1def4e-9586-4602-aee7-9d426a268c31",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "EnterAreaEditing",
+                    "type": "Button",
+                    "id": "8d856c3a-b993-469d-bd23-fdf7b9722ad2",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "ToggleGroundPlane",
+                    "type": "Button",
+                    "id": "d88cc26f-e0b6-4545-bba7-6c06dcbdb424",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "GroundPlaneIncrement",
+                    "type": "Button",
+                    "id": "90b4a35e-ca86-4149-ab99-e9af6e7d3fae",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "GroundPlaneDecrement",
+                    "type": "Button",
+                    "id": "31082383-fb71-4319-9673-bc5352efe034",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "AreaHeightIncrement",
+                    "type": "Button",
+                    "id": "8f141f6e-ce69-40c7-af71-18bdb8bb7f28",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "AreaHeightDecrement",
+                    "type": "Button",
+                    "id": "97cff9b4-a471-4c16-ae88-1f9160900125",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                }
+            ],
+            "bindings": [
+                {
+                    "name": "",
+                    "id": "3c950596-9e9c-4d58-aebd-42586dd42e29",
+                    "path": "<Keyboard>/3",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "EnterAreaEditing",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "b9734152-d24b-4c4c-981b-66f46f646356",
+                    "path": "<Keyboard>/q",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "ToggleGroundPlane",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "a7805e2a-38cb-429f-824b-6911bcfbb788",
+                    "path": "<Keyboard>/w",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "GroundPlaneIncrement",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "4fa417a5-2169-4c62-8862-7e029771847c",
+                    "path": "<Keyboard>/s",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "GroundPlaneDecrement",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "f29e556a-bbf8-4b05-b8f2-59da9cddd292",
+                    "path": "<Keyboard>/upArrow",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "AreaHeightIncrement",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "d7e1a12d-61f7-4714-be4b-c105afe1fc42",
+                    "path": "<Keyboard>/downArrow",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "AreaHeightDecrement",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "8a1d07ed-cd73-41c1-a555-4021b782b47e",
+                    "path": "<Keyboard>/1",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "EnterNavigation",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "809ce995-7f00-417d-8f52-e70aeaf5ba55",
+                    "path": "<Keyboard>/2",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "EnterSingleEditing",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                }
+            ]
+        },
+        {
+            "name": "ShortcutToggle",
+            "id": "2ada3a57-831d-4817-b3fc-71b9b14ffb99",
+            "actions": [
+                {
+                    "name": "ToggleShortcut",
+                    "type": "Button",
+                    "id": "41e530a7-a070-48e7-a8f1-3c67d8325d94",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                }
+            ],
+            "bindings": [
+                {
+                    "name": "",
+                    "id": "3ff5f382-db5b-4b0e-a41c-d25648979e0b",
+                    "path": "<Keyboard>/backquote",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "ToggleShortcut",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                }
+            ]
+        }
+    ],
+    "controlSchemes": [
+        {
+            "name": "New control scheme",
+            "bindingGroup": "New control scheme",
+            "devices": []
+        }
+    ]
+}

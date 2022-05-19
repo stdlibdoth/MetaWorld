@@ -14,6 +14,9 @@ public class GameManager : MonoBehaviour
     [SerializeField] private Transform m_managersHolder;
     [SerializeField] private VoxelManager m_voxelManagerPrefab;
     [SerializeField] private ResourceManager m_resourceManagerPrefab;
+    [SerializeField] private InputManager m_inputManagerPrefab;
+
+    [SerializeField] private EditingCamController m_editingCamControllerPrefab;
 
 
     private static GameManager m_singleton;
@@ -22,6 +25,7 @@ public class GameManager : MonoBehaviour
 
     private VoxelManager m_voxelManager;
     private ResourceManager m_resourceManager;
+    private EditingCamController m_editingCamController;
 
     public static GlobalSettingsData GlobalSettings
     {
@@ -52,7 +56,7 @@ public class GameManager : MonoBehaviour
 
     private void Start()
     {
-        InitModules();      
+        InitModules();
     }
 
     private void InitSettings()
@@ -97,5 +101,6 @@ public class GameManager : MonoBehaviour
     {
         m_voxelManager = Instantiate(m_voxelManagerPrefab, m_managersHolder);
         m_resourceManager = Instantiate(m_resourceManagerPrefab, m_managersHolder);
+        //m_editingCamController = Instantiate(m_editingCamControllerPrefab);
     }
 }

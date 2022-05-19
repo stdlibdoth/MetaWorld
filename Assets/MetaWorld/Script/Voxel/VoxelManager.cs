@@ -19,6 +19,12 @@ public class VoxelManager : MonoBehaviour
 
 
     private static VoxelManager m_singleton = null;
+    private MeshGenerator m_meshGen;
+
+    public static MeshGenerator MeshGenerator
+    {
+        get { return m_singleton.m_meshGen; }
+    }
 
     public static float voxelSize { get { return m_singleton.m_voxelSize; } }
     public static int chunkSize { get { return m_singleton.m_chunkSize; } }
@@ -31,7 +37,7 @@ public class VoxelManager : MonoBehaviour
     public static bool isExportingData { get { return m_singleton.m_voxelDataFormatter.WritingTaskCount != 0; } }
 
     private string m_voxelDataDir;
-    private MeshGenerator m_meshGen;
+    //private MeshGenerator m_meshGen;
     private VoxelDataFormatter m_voxelDataFormatter;
 
     private void Awake()
@@ -46,8 +52,6 @@ public class VoxelManager : MonoBehaviour
             Init();
         }
     }
-
-
     private void Init()
     {
         m_voxelDataDir = GameManager.RootDirectory + "/" + GameManager.GlobalSettings.voxelDataDirectory;

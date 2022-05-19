@@ -2,12 +2,18 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
+[RequireComponent(typeof(IMeshControl))]
 public class VoxelCommandModel : MonoBehaviour
 {
     private IMeshControl m_meshControl;
 
     private Voxel[] m_voxelCopyBuffer;
     private Vector3Int m_voxelBufferSize;
+
+    private void Awake()
+    {
+        m_meshControl = GetComponent<IMeshControl>();
+    }
 
     public void ClearRectArea(Vector3Int min, Vector3Int max)
     {
@@ -72,17 +78,47 @@ public class VoxelCommandModel : MonoBehaviour
         }
     }
 
-    public void SetVoxel(Vector3Int world_pos, Color color)
+    public void SetVoxel(Vector3Int world_coord, Color color)
     {
-        m_meshControl.SetVoxelData(world_pos, new Voxel { color = color, render = 1 });
-        Vector3Int chunk = m_meshControl.GetChunkCoordinate(world_pos);
+        m_meshControl.SetVoxelData(world_coord, new Voxel { color = color, render = 1 });
+        Vector3Int chunk = m_meshControl.GetChunkCoordinate(world_coord);
         m_meshControl.UpdateChunkMesh(chunk);
     }
 
-    public void ClearVoxel(Vector3Int world_pos)
+    public void SetVoxelCheckEqual(Vector3Int world_coord, Color color)
     {
-        m_meshControl.SetVoxelData(world_pos, new Voxel { render = 0 });
-        Vector3Int chunk = m_meshControl.GetChunkCoordinate(world_pos);
+        if (m_meshControl.GetVoxelData(world_coord) != new Voxel { color = color, render = 1 })
+        {
+            m_meshControl.SetVoxelData(world_coord, new Voxel { color = color, render = 1 });
+            Vector3Int chunk = m_meshControl.GetChunkCoordinate(world_coord);
+            m_meshControl.UpdateChunkMesh(chunk);
+        }
+    }
+
+    public void ClearVoxel(Vector3Int world_coord)
+    {
+        if (m_meshControl.GetVoxelData(world_coord).render == 0)
+            return;
+        m_meshControl.SetVoxelData(world_coord, new Voxel { render = 0 });
+        Vector3Int chunk = m_meshControl.GetChunkCoordinate(world_coord);
         m_meshControl.UpdateChunkMesh(chunk);
+    }
+
+    public Vector3Int GetWorldCoord(Vector3 world_pos)
+    {
+        return m_meshControl.GetWorldCoordinate(world_pos);
+    }
+
+    public Voxel GetVoxelData(Vector3Int world_coord)
+    {
+        return m_meshControl.GetVoxelData(world_coord);
+    }
+
+    public void RefreshMesh(Vector3Int min, Vector3Int max)
+    {
+        m_meshControl.ClearAllChunk();
+        Vector3Int chunkMin = m_meshControl.GetChunkCoordinate(min);
+        Vector3Int chunkMax = m_meshControl.GetChunkCoordinate(max);
+        m_meshControl.LoadMeshData(chunkMin, chunkMax, true, true, true);
     }
 }

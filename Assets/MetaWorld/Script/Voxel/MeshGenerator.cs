@@ -15,7 +15,7 @@ public class MeshGenerator : MonoBehaviour,IMeshControl
     [SerializeField] private ColliderSpawner m_colliderSpawner;
     [SerializeField] private VoxelSpawner m_voxelChunkSpawner;
 
-    [SerializeField] private float renderExtent;
+    [SerializeField] private float m_renderExtent;
     [SerializeField] private string m_voxelLayer;
     [SerializeField] private float m_updateDist;
     [SerializeField] private int m_meshGenBatchInterval;
@@ -24,8 +24,9 @@ public class MeshGenerator : MonoBehaviour,IMeshControl
 
     private Dictionary<Vector3Int, Voxel[]> m_chunkData;
     private Dictionary<Vector3Int, VoxelChunk> m_chunks;
+    private List<Vector3Int> m_chunkReleaseBuffer;
     private HashSet<Vector3Int> m_exportingChunks;
-    private HashSet<Vector3Int> m_dataChangeFlag;
+    private HashSet<Vector3Int> m_dataChangeFlags;
 
     //Mesh Generation
     private JobHandle m_MeshGenHandle;
@@ -35,7 +36,8 @@ public class MeshGenerator : MonoBehaviour,IMeshControl
     private NativeQueue<Vector3Int> m_meshGenBuffer;
     private NativeHashSet<Vector3Int> m_meshGenBufferHash;
     private int m_meshGenBufferCount;
-
+    private bool m_continuousUpdateFlag;
+    private FrameTimer m_chunkReleaseBufferTimer;
 
     //Generation Range
     private Vector3 m_prevDrawPos;
@@ -59,26 +61,45 @@ public class MeshGenerator : MonoBehaviour,IMeshControl
 
     private void Awake()
     {
+        m_chunkReleaseBuffer = new List<Vector3Int>();
         m_chunkData = new Dictionary<Vector3Int, Voxel[]>();
         m_chunks = new Dictionary<Vector3Int, VoxelChunk>();
         m_exportingChunks = new HashSet<Vector3Int>();
-        m_dataChangeFlag = new HashSet<Vector3Int>();
+        m_dataChangeFlags = new HashSet<Vector3Int>();
         m_meshGenBuffer = new NativeQueue<Vector3Int>(Allocator.Persistent);
         m_meshGenBufferHash = new NativeHashSet<Vector3Int>(m_meshGenBatchSize, Allocator.Persistent);
         m_genChunks = new NativeList<Vector3Int>(Allocator.Persistent);
         m_meshGenBufferCount = 0;
-        m_center = transform.position;
+        m_meshGenState = 0;
+        m_continuousUpdateFlag = false;
+        m_meshDataArray = new Mesh.MeshDataArray();
+        m_chunkReleaseBufferTimer = FrameTimerManager.GetTimer(3, FrameTimerMode.Repeat);
         m_colliderSpawner.Init(m_voxelLayer);
         m_voxelChunkSpawner.Init();
-        m_meshGenState = 0;
-        m_meshDataArray = new Mesh.MeshDataArray();
     }
 
 
     private void Start()
     {
-        UpdateVoxelRange();
-        LoadInitialChunkData();
+        m_chunkReleaseBufferTimer.OnTimeUp.AddListener(() =>
+        {
+            //clear chunk release buffer
+            List<Vector3Int> buffer = new List<Vector3Int>(m_chunkReleaseBuffer);
+            foreach (var chunk in buffer)
+            {
+                if (m_meshGenBufferHash.Contains(chunk) || m_genChunks.Contains(chunk))
+                    continue;
+                if (m_chunks.ContainsKey(chunk))
+                {
+                    m_voxelChunkSpawner.Release(m_chunks[chunk]);
+                    m_chunks.Remove(chunk);
+                }
+                m_chunkReleaseBuffer.Remove(chunk);
+            }
+        });
+        m_chunkReleaseBufferTimer.Start();
+        //UpdateVoxelExtent();
+        //LoadInitialChunkData();
         //string path = "F:/Eifle.txt";
         //ReadVoxelData(path);
     }
@@ -87,57 +108,62 @@ public class MeshGenerator : MonoBehaviour,IMeshControl
     private void Update()
     {
         //Update mesh generation range
-        if (Vector3.Distance(transform.position, m_prevDrawPos) > m_updateDist)
+        if (m_continuousUpdateFlag && Vector3.Distance(m_center, m_prevDrawPos) > m_updateDist)
         {
-            UpdateVoxelRange();
-            UpdateAllChunks();
-            m_prevDrawPos = transform.position;
+            UpdateVoxelExtent();
+            UpdateAllChunksContinuous();
+            m_prevDrawPos = m_center;
         }
 
-        //Mesh calculation
-        if (m_meshGenState == 0 && m_meshGenBufferCount > 0)
-        {
-            int batchCount = m_meshGenBufferCount < m_meshGenBatchSize ? m_meshGenBufferCount : m_meshGenBatchSize;
-            Vector3Int[] min = new Vector3Int[batchCount];
-            Vector3Int[] max = new Vector3Int[batchCount];
-            for (int i = 0; i < batchCount; i++)
-            {
-                Vector3Int genChunk = m_meshGenBuffer.Dequeue();
-                min[i] = m_chunks[genChunk].drawRangeMin;
-                max[i] = m_chunks[genChunk].drawRangeMax;
-                m_meshGenBufferHash.Remove(genChunk);
-                m_genChunks.Add(genChunk);
-                m_meshGenBufferCount--;
-            }
-            m_meshGenState = 1;
-            GenerateMeshes(m_genChunks, min, max);
-        }
-        //Apply mesh
-        else if(m_meshGenState == 1 && m_MeshGenHandle.IsCompleted)
-        {
-            Mesh[] meshes = new Mesh[m_genChunks.Length];
-            int chunkCount = m_genChunks.Length;
-            float length = VoxelManager.chunkSize * VoxelManager.voxelSize;
-            for (int i = 0; i < chunkCount; i++)
-            {
-                meshes[i] = m_chunks[m_genChunks[i]].meshFilter.mesh;
-                Vector3 center = new Vector3(length * 0.5f, length * 0.5f, length * 0.5f);
-                meshes[i].bounds = new Bounds(center, new Vector3(length, length, length));
-            }
-            m_MeshGenHandle.Complete();
-            Mesh.ApplyAndDisposeWritableMeshData(m_meshDataArray, meshes);
-            m_meshGenState = 0;
-            m_genChunks.Clear();
-        }
+        UpdateMeshes();
+
+        UpdateDataExporting();
     }
 
     #endregion
 
     #region IMeshControl Implement
 
+    public void SetCenter(Vector3 center, bool continuous_mode)
+    {
+        m_center = center;
+        if(!continuous_mode)
+            m_prevDrawPos = m_center;
+        UpdateVoxelExtent();
+    }
+
+    public Vector3Int GetCoordRangeMin()
+    {
+        return new Vector3Int(m_rangeX.min, m_rangeY.min, m_rangeZ.min);
+    }
+    public Vector3Int GetCoordRangeMax()
+    {
+        return new Vector3Int(m_rangeX.max, m_rangeY.max, m_rangeZ.max);
+    }
+
+    public void SetRenderExtent(float extent)
+    {
+        m_renderExtent = extent;
+        UpdateVoxelExtent();
+        if (m_continuousUpdateFlag)
+            UpdateAllChunksContinuous();
+        else
+        {
+            ClearAllChunkInternal();
+            Vector3Int min = GetChunk(new Vector3Int(m_rangeX.min, m_rangeY.min, m_rangeZ.min));
+            Vector3Int max = GetChunk(new Vector3Int(m_rangeX.max, m_rangeY.max, m_rangeZ.max));
+            LoadMeshdataInternal(min, max, true, true, true);
+        }
+    }
+
     public VoxelCoordinate GetVoxelCoordinate(Vector3Int world_coord)
     {
         return GetVoxelCoordInternal(world_coord,VoxelManager.chunkSize);
+    }
+
+    public Vector3Int GetWorldCoordinate(Vector3 world_pos)
+    {
+        return WorldCoordinate(world_pos);
     }
 
     public Vector3Int GetChunkCoordinate(Vector3Int world_coord)
@@ -177,9 +203,13 @@ public class MeshGenerator : MonoBehaviour,IMeshControl
     public void SetVoxelData(Vector3Int world_coord, Voxel data)
     {
         VoxelCoordinate coord = GetVoxelCoordInternal(world_coord, VoxelManager.chunkSize);
+        print("world:" + world_coord);
+        print("chunk:" + coord.chunkCoord);
+        print("local:" + coord.localCoord);
         if (!m_chunkData.ContainsKey(coord.chunkCoord))
             m_chunkData[coord.chunkCoord] = new Voxel[VoxelManager.dataLength];
         m_chunkData[coord.chunkCoord][CoordToIndex(coord.localCoord,VoxelManager.chunkSize)] = data;
+        m_dataChangeFlags.Add(coord.chunkCoord);
     }
 
     public Voxel[] GetChunkData(Vector3Int chunk_coord, bool copy_data)
@@ -214,7 +244,7 @@ public class MeshGenerator : MonoBehaviour,IMeshControl
     public void UpdateChunkMeshes(Vector3Int min, Vector3Int max, bool load_data = false, bool check_range = false)
     {
         if (check_range)
-            UpdateMeshRange(min, max);
+            UpdateMeshGenerationRangeForChunks(min, max);
 
         for (int x = min.x; x <= max.x; x++)
         {
@@ -228,16 +258,73 @@ public class MeshGenerator : MonoBehaviour,IMeshControl
                     if (load_data)
                         m_chunkData[chunkCoord] = RequestChuckData(chunkCoord, true);
                     else
+                    {
+                        print("bg1");
                         BufferMeshGen(chunkCoord);
+                    }
                 }
             }
+        }
+    }
+    public void UpdateChunkMesh(Vector3Int chunk, bool load_data = false, bool check_range = false)
+    {
+        if (check_range)
+            UpdateMeshGenerationRangeForChunks(chunk, chunk);
+
+        if (!m_chunks.ContainsKey(chunk))
+            SpawnVoxelChunk(chunk).gameObject.SetActive(true);
+        if (load_data)
+            m_chunkData[chunk] = RequestChuckData(chunk, true);
+        else
+        {
+            print("bg2");
+            BufferMeshGen(chunk);
         }
     }
 
     public void LoadMeshData(Vector3Int min, Vector3Int max, bool update_mesh = false, bool show_mesh = false, bool check_range = false)
     {
+        LoadMeshdataInternal(min, max, update_mesh, show_mesh, check_range);
+    }
+
+    public void LoadMeshData(Vector3Int chunk, bool update_mesh = false, bool show_mesh = false, bool check_range = false)
+    {
         if (check_range)
-            UpdateMeshRange(min, max);
+            UpdateMeshGenerationRangeForChunks(chunk, chunk);
+
+        if (update_mesh && !m_chunks.ContainsKey(chunk))
+        {
+            SpawnVoxelChunk(chunk).gameObject.SetActive(show_mesh);
+        }
+        m_chunkData[chunk] = RequestChuckData(chunk, update_mesh);
+    }
+
+    public void SetUpdateMode(bool continuous_update)
+    {
+        m_continuousUpdateFlag = continuous_update;
+    }
+
+    public void ClearChunk(Vector3Int chunk, bool clear_mesh = true, bool clear_data = true)
+    {
+        if(clear_mesh && m_chunks.ContainsKey(chunk))
+        {
+            m_voxelChunkSpawner.Release(m_chunks[chunk]);
+            m_chunks.Remove(chunk);
+        }
+        if(clear_data)
+            m_chunkData.Remove(chunk);
+    }
+
+    public void ClearAllChunk(bool clear_mesh = true, bool clear_data = true)
+    {
+        ClearAllChunkInternal(clear_mesh, clear_data);
+    }
+    #endregion
+
+    private void LoadMeshdataInternal(Vector3Int min, Vector3Int max, bool update_mesh = false, bool show_mesh = false, bool check_range = false)
+    {
+        if (check_range)
+            UpdateMeshGenerationRangeForChunks(min, max);
 
         for (int x = min.x; x <= max.x; x++)
         {
@@ -256,32 +343,34 @@ public class MeshGenerator : MonoBehaviour,IMeshControl
         }
     }
 
-    public void UpdateChunkMesh(Vector3Int chunk, bool load_data = false, bool check_range = false)
+    private void ClearAllChunkInternal(bool clear_mesh = true, bool clear_data = true)
     {
-        if (check_range)
-            UpdateMeshRange(chunk, chunk);
+        m_MeshGenHandle.Complete();
+        if (m_meshGenState !=0)
+            m_meshDataArray.Dispose();
+        m_meshGenState = 0;
+        m_meshGenBufferCount = 0;
+        m_meshGenBuffer.Clear();
+        m_meshGenBufferHash.Clear();
+        m_genChunks.Clear();
 
-        if (!m_chunks.ContainsKey(chunk))
-            SpawnVoxelChunk(chunk).gameObject.SetActive(true);
-        if (load_data)
-            m_chunkData[chunk] = RequestChuckData(chunk, true);
-        else
-            BufferMeshGen(chunk);
-    }
 
-    public void LoadMeshData(Vector3Int chunk, bool update_mesh = false, bool show_mesh = false, bool check_range = false)
-    {
-        if (check_range)
-            UpdateMeshRange(chunk, chunk);
-
-        if (update_mesh && !m_chunks.ContainsKey(chunk))
+        List<Vector3Int> c = new List<Vector3Int>(m_chunkData.Keys);
+        if (clear_data)
         {
-            SpawnVoxelChunk(chunk).gameObject.SetActive(show_mesh);
+            foreach (var v3 in c)
+                m_chunkData.Remove(v3);
         }
-        m_chunkData[chunk] = RequestChuckData(chunk, update_mesh);
+        if (clear_mesh)
+        {
+            c = new List<Vector3Int>(m_chunks.Keys);
+            foreach (var v3 in c)
+            {
+                m_voxelChunkSpawner.Release(m_chunks[v3]);
+                m_chunks.Remove(v3);
+            }
+        }
     }
-
-    #endregion
 
     private VoxelChunk SpawnVoxelChunk(Vector3Int chunk_coord)
     {
@@ -296,7 +385,7 @@ public class MeshGenerator : MonoBehaviour,IMeshControl
         Vector3Int min = GetChunk(new Vector3Int(m_rangeX.min, m_rangeY.min, m_rangeZ.min));
         Vector3Int max = GetChunk(new Vector3Int(m_rangeX.max, m_rangeY.max, m_rangeZ.max));
 
-        UpdateMeshRange(min, max);
+        UpdateMeshGenerationRangeForChunks(min, max);
         int size = VoxelManager.chunkSize;
         for (int x = min.x -1; x <= max.x+1; x++)
         {
@@ -316,19 +405,24 @@ public class MeshGenerator : MonoBehaviour,IMeshControl
         }
     }
 
-    private void UpdateVoxelRange()
+    private Vector3Int WorldCoordinate(Vector3 world_pos)
     {
-        m_prevDrawPos = transform.position;
-        m_center = transform.position;
+        Vector3 v3 = world_pos / VoxelManager.voxelSize;
+        Vector3Int coord = new Vector3Int((int)math.floor(v3.x), (int)math.floor(v3.y), (int)math.floor(v3.z));
+        return coord;
+    }
+
+    private void UpdateVoxelExtent()
+    {
         float vSize = VoxelManager.voxelSize;
-        m_voxelExtent = Mathf.FloorToInt(renderExtent / VoxelManager.voxelSize);
+        m_voxelExtent = Mathf.FloorToInt(m_renderExtent / VoxelManager.voxelSize);
         m_centerCoord = new Vector3Int(Mathf.FloorToInt(m_center.x / vSize), Mathf.FloorToInt(m_center.y / vSize), Mathf.FloorToInt(m_center.z / vSize));
         m_rangeX = new MinMaxInt(m_centerCoord.x - m_voxelExtent, m_centerCoord.x + m_voxelExtent - 1);
         m_rangeY = new MinMaxInt(m_centerCoord.y - m_voxelExtent, m_centerCoord.y + m_voxelExtent - 1);
         m_rangeZ = new MinMaxInt(m_centerCoord.z - m_voxelExtent, m_centerCoord.z + m_voxelExtent - 1);
     }
 
-    private void UpdateMeshRange(Vector3Int min, Vector3Int max)
+    private void UpdateMeshGenerationRangeForChunks(Vector3Int min, Vector3Int max)
     {
         int size = VoxelManager.chunkSize;
         int xN = size - Mathf.Abs(m_rangeX.min - (min.x + 1) * size);
@@ -380,7 +474,47 @@ public class MeshGenerator : MonoBehaviour,IMeshControl
         }
     }
 
-    private void UpdateAllChunks()
+    private void UpdateMeshes()
+    {
+        //Mesh calculation
+        if (m_meshGenState == 0 && m_meshGenBufferCount > 0)
+        {
+            m_meshGenState = 1;
+            int batchCount = m_meshGenBufferCount < m_meshGenBatchSize ? m_meshGenBufferCount : m_meshGenBatchSize;
+            Vector3Int[] min = new Vector3Int[batchCount];
+            Vector3Int[] max = new Vector3Int[batchCount];
+            for (int i = 0; i < batchCount; i++)
+            {
+                Vector3Int genChunk = m_meshGenBuffer.Dequeue();
+                min[i] = m_chunks[genChunk].drawRangeMin;
+                max[i] = m_chunks[genChunk].drawRangeMax;
+                m_meshGenBufferHash.Remove(genChunk);
+                m_genChunks.Add(genChunk);
+                m_meshGenBufferCount--;
+            }
+            GenerateMeshes(m_genChunks, min, max);
+        }
+        //Apply mesh
+        else if (m_meshGenState == 1 && m_MeshGenHandle.IsCompleted)
+        {
+            m_meshGenState = 2;
+            Mesh[] meshes = new Mesh[m_genChunks.Length];
+            int chunkCount = m_genChunks.Length;
+            float length = VoxelManager.chunkSize * VoxelManager.voxelSize;
+            for (int i = 0; i < chunkCount; i++)
+            {
+                meshes[i] = m_chunks[m_genChunks[i]].meshFilter.mesh;
+                Vector3 center = new Vector3(length * 0.5f, length * 0.5f, length * 0.5f);
+                meshes[i].bounds = new Bounds(center, new Vector3(length, length, length));
+            }
+            m_MeshGenHandle.Complete();
+            Mesh.ApplyAndDisposeWritableMeshData(m_meshDataArray, meshes);
+            m_genChunks.Clear();
+            m_meshGenState = 0;
+        }
+    }
+
+    private void UpdateAllChunksContinuous()
     {
         Vector3Int min = GetChunk(new Vector3Int(m_rangeX.min, m_rangeY.min, m_rangeZ.min));
         Vector3Int max = GetChunk(new Vector3Int(m_rangeX.max, m_rangeY.max, m_rangeZ.max));
@@ -400,32 +534,16 @@ public class MeshGenerator : MonoBehaviour,IMeshControl
                 for (int z = min.z - 2; z <= max.z + 2; z++)
                 {
 
-                    //Serialize
+                    //clear data
                     if (x == min.x - 2 || x == max.x + 2
                         || y == min.y - 2 || y == max.y + 2
                         || z == min.z - 2 || z == max.z + 2)
                     {
                         Vector3Int coord = new Vector3Int(x, y, z);
-
                         if(m_chunkData.ContainsKey(coord)&&
                             !m_exportingChunks.Contains(coord))
                         {
-                            if (m_dataChangeFlag.Contains(coord))
-                            {
-                                print("Export:" + coord);
-                                m_exportingChunks.Add(coord);
-                                VoxelManager.ExportData(m_chunkData[coord], coord,
-                                    () =>
-                                    {
-                                        m_chunkData.Remove(coord);
-                                        m_exportingChunks.Remove(coord);
-                                        m_dataChangeFlag.Remove(coord);
-                                    });
-                            }
-                            else
-                            {
-                                m_chunkData.Remove(coord);
-                            }
+                            m_chunkData.Remove(coord);
                         }
                         continue;
                     }
@@ -439,8 +557,9 @@ public class MeshGenerator : MonoBehaviour,IMeshControl
                         Vector3Int coord = new Vector3Int(x, y, z);
                         if (m_chunks.ContainsKey(coord))
                         {
-                            m_voxelChunkSpawner.Release(m_chunks[coord]);
-                            m_chunks.Remove(coord);
+                            m_chunkReleaseBuffer.Add(coord);
+                            //m_voxelChunkSpawner.Release(m_chunks[coord]);
+                            //m_chunks.Remove(coord);
                         }
                         if (!m_chunkData.ContainsKey(coord))
                             m_chunkData[coord] = RequestChuckData(coord, false);
@@ -477,7 +596,7 @@ public class MeshGenerator : MonoBehaviour,IMeshControl
                         SpawnVoxelChunk(new Vector3Int(x, y, z)).gameObject.SetActive(true);
                     }
 
-                    //m_chunks[chunkCoord].gameObject.SetActive(true);
+
                     if (m_chunks[chunkCoord].drawRangeMin != drawRangeMin
                         || m_chunks[chunkCoord].drawRangeMax != drawRangeMax)
                     {
@@ -489,26 +608,45 @@ public class MeshGenerator : MonoBehaviour,IMeshControl
         }
     }
 
+    private void UpdateDataExporting()
+    {
+        if (m_dataChangeFlags.Count == 0)
+            return;
+        List<Vector3Int> coords = new List<Vector3Int>(m_dataChangeFlags);
+        foreach (Vector3Int coord in coords)
+        {
+            if (m_chunkData.ContainsKey(coord) && !m_exportingChunks.Contains(coord))
+            {
+                print("Export:" + coord);
+                m_exportingChunks.Add(coord);
+                VoxelManager.ExportData(m_chunkData[coord], coord,
+                    () =>
+                    {
+                        m_exportingChunks.Remove(coord);
+                    });
+            }
+            m_dataChangeFlags.Remove(coord);
+        }
+    }
+
     private Voxel[] RequestChuckData(Vector3Int chunk_coord, bool updateMesh)
     {
         int chunkSize = VoxelManager.chunkSize;
         Voxel[] v = new Voxel[chunkSize * chunkSize * chunkSize];
 
         string path = VoxelManager.VoxelDataDir + "/" + chunk_coord.ToString() + ".txt";
-        if (!File.Exists(path))
-        {
-            m_dataChangeFlag.Add(chunk_coord);
-        }
-            //print("read:" + chunk_coord);
-            VoxelManager.LoadData(chunk_coord, (data) =>
+        bool dataChanged = !File.Exists(path);
+        VoxelManager.LoadData(chunk_coord, (data) =>
+         {
+             m_chunkData[chunk_coord] = data;
+             if (m_chunks.ContainsKey(chunk_coord) && updateMesh)
              {
-                 m_chunkData[chunk_coord] = data;
-                 if (m_chunks.ContainsKey(chunk_coord) && updateMesh)
-                 {
-                     BufferMeshGen(chunk_coord);
-                     //print("Read Done: " + chunk_coord);
-                 }
-             });
+                 BufferMeshGen(chunk_coord);
+                 //print("Read Done: " + chunk_coord);
+             }
+             if(dataChanged)
+                 m_dataChangeFlags.Add(chunk_coord);
+         });
         return v;
     }
 
@@ -535,8 +673,11 @@ public class MeshGenerator : MonoBehaviour,IMeshControl
         for (int i = 0; i < xyz.Length; i++)
         {
             int step = math.select(0, -1, xyz[i] < 0);
+            int sign = math.select(1, -1, xyz[i] < 0);
+            int coord = xyz[i];
             xyz[i] = ((xyz[i] - step) / chunk_size) + step;
-            xyz1[i] = (-step * chunk_size) - (math.abs(xyz1[i]) % (chunk_size - step));
+            //xyz1[i] = (-step * chunk_size) + sign * (math.abs(xyz1[i]) % (chunk_size - step));
+            xyz1[i] = math.abs(xyz[i] * chunk_size - coord);
         }
 
         Vector3Int chunk = new Vector3Int(xyz[0], xyz[1], xyz[2]);
@@ -619,12 +760,12 @@ public class MeshGenerator : MonoBehaviour,IMeshControl
                     //serilaize data
                     Vector3Int chunkCoord = new Vector3Int(x, y, z);
                     m_exportingChunks.Add(chunkCoord);
-                    m_dataChangeFlag.Add(chunkCoord);
+                    m_dataChangeFlags.Add(chunkCoord);
                     VoxelManager.ExportData(m_chunkData[chunkCoord], chunkCoord,
                         () =>
                         {
                             m_exportingChunks.Remove(chunkCoord);
-                            m_dataChangeFlag.Remove(chunkCoord);
+                            m_dataChangeFlags.Remove(chunkCoord);
                         });
                 }
             }
@@ -694,7 +835,7 @@ public class MeshGenerator : MonoBehaviour,IMeshControl
     [BurstCompile]
     private struct MeshGenJobs : IJobParallelFor
     {
-        
+
         public Mesh.MeshDataArray meshDataArray;
 
         [ReadOnly]

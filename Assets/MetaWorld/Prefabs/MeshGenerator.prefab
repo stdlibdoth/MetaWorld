@@ -56,6 +56,8 @@ GameObject:
   m_Component:
   - component: {fileID: 5228735163031861756}
   - component: {fileID: 5228735163031861757}
+  - component: {fileID: 1782456751057438072}
+  - component: {fileID: 2368928062534008775}
   m_Layer: 0
   m_Name: MeshGenerator
   m_TagString: Untagged
@@ -71,7 +73,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 5228735163031861752}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -50, y: 0, z: 0}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -94,11 +96,41 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   m_colliderSpawner: {fileID: 9139972703081126857}
   m_voxelChunkSpawner: {fileID: 4269963564389244138}
-  renderExtent: 50
+  m_renderExtent: 0
   m_voxelLayer: Voxel
-  m_updateDist: 10
+  m_updateDist: 5
   m_meshGenBatchInterval: 5
   m_meshGenBatchSize: 30
+--- !u!114 &1782456751057438072
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5228735163031861752}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c451af7b486b60f44b4f4797332bd8b6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_previewCubePrefab: {fileID: 1077614913150582343, guid: 476a135be4b81b049a08d19609551272,
+    type: 3}
+  m_voxelCommands: {fileID: 2368928062534008775}
+  m_gridLayer:
+    serializedVersion: 2
+    m_Bits: 256
+--- !u!114 &2368928062534008775
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5228735163031861752}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 45ec6ed3cc3f8734ea952c9ed8d9835d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &9139972703081126858
 GameObject:
   m_ObjectHideFlags: 0

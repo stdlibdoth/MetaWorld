@@ -136,13 +136,13 @@ public class VoxelDataFormatter : IFormatter<Voxel[]>,IDisposable
             if (!File.Exists(path))
             {
                 //Debug.Log("gen:" + coord);
-                System.Random rand = new System.Random();
-                Color color = new Color((float)rand.NextDouble(), (float)rand.NextDouble(), (float)rand.NextDouble(), 1);
-                for (int i = 0; i < data_length; i++)
-                {
-                    data[i].render = rand.Next(0, 10) == 1 ? 1 : 0;
-                    data[i].color = color;
-                }
+                //System.Random rand = new System.Random();
+                //Color color = new Color((float)rand.NextDouble(), (float)rand.NextDouble(), (float)rand.NextDouble(), 1);
+                //for (int i = 0; i < data_length; i++)
+                //{
+                //    data[i].render = rand.Next(0, 10) == 1 ? 1 : 0;
+                //    data[i].color = color;
+                //}
             }
             else
             {
